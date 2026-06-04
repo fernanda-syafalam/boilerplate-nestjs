@@ -2,12 +2,6 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "rootDir": "src",
-    // Keep the incremental build cache INSIDE dist. nest-cli.json sets
-    // `deleteOutDir: true`, which wipes dist on every build/watch start. If
-    // the .tsbuildinfo lived at the repo root (the default), it would survive
-    // that wipe — tsc would then think the (deleted) outputs are still
-    // up-to-date and emit nothing, leaving `dist/main.js` missing and
-    // `node dist/main` failing. Tying it to dist guarantees a re-emit.
     "tsBuildInfoFile": "./dist/tsconfig.build.tsbuildinfo"
   },
   "exclude": [
