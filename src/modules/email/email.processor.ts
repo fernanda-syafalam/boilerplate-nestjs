@@ -22,19 +22,19 @@ export class EmailProcessor extends WorkerHost {
     }
     const result = await this.gateway.send(parsed.data);
     this.logger.info(
-      { jobId: job.id, idempotencyKey: parsed.data.idempotencyKey, messageId: result.messageId },
+      { jobId: job?.id, idempotencyKey: parsed.data.idempotencyKey, messageId: result.messageId },
       'email sent',
     );
     return result;
   }
 
   @OnWorkerEvent('failed')
-  onFailed(job: Job<SendEmailRequest>, err: Error): void {
+  onFailed(job: Job<SendEmailRequest> | undefined, err: Error): void {
     this.logger.error(
       {
-        jobId: job.id,
-        attemptsMade: job.attemptsMade,
-        idempotencyKey: job.data.idempotencyKey,
+        jobId: job?.id,
+        attemptsMade: job?.attemptsMade,
+        idempotencyKey: job?.data?.idempotencyKey,
         err: err.message,
       },
       'email job failed',

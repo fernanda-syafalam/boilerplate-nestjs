@@ -5,6 +5,7 @@ import { PinoLogger } from 'nestjs-pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { User } from '../../infrastructure/database/schema/users.schema';
 import { PasswordHasher } from '../../infrastructure/security/password-hasher';
+import { encodeCursor } from './users.cursor';
 import { UsersRepository } from './users.repository';
 import { UsersService } from './users.service';
 
@@ -137,6 +138,28 @@ describe('UsersService', () => {
 
       const ok = await argon2.verify(created.passwordHash, 'another-secret-pass-9');
       expect(ok).toBe(true);
+    });
+  });
+
+  describe('list', () => {
+    const second: User = { ...sampleUser, id: '00000000-0000-4000-8000-000000000002' };
+
+    it('builds nextCursor from the last returned item when more rows exist', async () => {
+      repo.listPage.mockResolvedValue({ items: [sampleUser, second], hasMore: true });
+
+      const page = await service.list(undefined, 2);
+
+      expect(repo.listPage).toHaveBeenCalledWith(undefined, 2);
+      expect(page.items).toEqual([sampleUser, second]);
+      expect(page.nextCursor).toBe(encodeCursor(second));
+    });
+
+    it('returns a null cursor on the last page', async () => {
+      repo.listPage.mockResolvedValue({ items: [sampleUser], hasMore: false });
+
+      const page = await service.list(undefined, 2);
+
+      expect(page.nextCursor).toBeNull();
     });
   });
 });
