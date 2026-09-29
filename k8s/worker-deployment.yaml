@@ -19,7 +19,6 @@ spec:
       labels:
         app.kubernetes.io/name: boilerplate-nestjs-worker
     spec:
-      # Let in-flight BullMQ jobs finish after SIGTERM.
       terminationGracePeriodSeconds: 60
       securityContext:
         runAsNonRoot: true

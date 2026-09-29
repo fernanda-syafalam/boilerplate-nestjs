@@ -1,4 +1,3 @@
-// Vitest workers need reflect-metadata for DI.
 import 'reflect-metadata';
 
 process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';

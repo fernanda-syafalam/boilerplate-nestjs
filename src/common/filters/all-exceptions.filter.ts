@@ -10,7 +10,6 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { PinoLogger } from 'nestjs-pino';
 import { ZodError } from 'zod';
 
-/** RFC 7807 body; requestId is an extension member. */
 interface ProblemDetails {
   type: string;
   title: string;
@@ -24,7 +23,6 @@ interface ProblemDetails {
 
 const RESERVED_MEMBERS = new Set(['message', 'error', 'statusCode', 'status']);
 
-/** Extension members that may reach the client on 5xx (e.g. /readyz dependency checks). */
 const SERVER_ERROR_EXTENSIONS = new Set(['checks']);
 
 function extensionMembers(obj: Record<string, unknown>): Record<string, unknown> {

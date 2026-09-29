@@ -25,7 +25,6 @@ const envObject = z.object({
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 
-  // Credentials are enabled, so a wildcard origin would be unsafe.
   CORS_ORIGINS: z
     .string()
     .default('http://localhost:5173')

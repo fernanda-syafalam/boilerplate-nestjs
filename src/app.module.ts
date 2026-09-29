@@ -26,7 +26,7 @@ import { UsersModule } from './modules/users/users.module';
     AppLoggerModule,
     DrizzleModule,
     RedisModule,
-    // Redis storage so the limit is shared across replicas; e2e tests override the options token.
+    // Redis storage so the limit is shared across replicas.
     ThrottlerModule.forRootAsync({
       inject: [ConfigService, RedisService],
       useFactory: (config: AppConfigService, redis: RedisService) => ({
@@ -46,11 +46,9 @@ import { UsersModule } from './modules/users/users.module';
     UsersModule,
   ],
   providers: [
-    // Registered via DI so PinoLogger is injected.
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     // Throttle first so unauthenticated floods (e.g. login brute force) are limited too.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
-    // Default-deny; opt out with @Public().
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
