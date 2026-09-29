@@ -28,8 +28,15 @@ describe('EmailService', () => {
     expect(payload).toMatchObject({
       to: 'a@b.test',
       templateId: 'order-confirm',
-      idempotencyKey: 'order-confirm:order-1',
+      idempotencyKey: 'order-confirm-order-1',
     });
-    expect(options).toEqual({ jobId: 'order-confirm:order-1' });
+    expect(options).toEqual({ jobId: 'order-confirm-order-1' });
+  });
+
+  it("uses a jobId without ':' (BullMQ rejects custom ids containing it)", async () => {
+    await service.sendOrderConfirmation('order-1', 'a@b.test', {});
+
+    const options = queueAdd.mock.calls[0]?.[2] as { jobId: string };
+    expect(options.jobId).not.toContain(':');
   });
 });

@@ -1,8 +1,8 @@
 import { registerAs } from '@nestjs/config';
-import { envSchema } from './env.schema';
+import { parseEnv } from './env.schema';
 
 export const appConfig = registerAs('app', () => {
-  const env = envSchema.parse(process.env);
+  const env = parseEnv();
   return {
     nodeEnv: env.NODE_ENV,
     port: env.PORT,
@@ -20,6 +20,8 @@ export const appConfig = registerAs('app', () => {
     jwt: {
       secret: env.JWT_SECRET,
       expiresIn: env.JWT_EXPIRES_IN,
+      issuer: env.JWT_ISSUER,
+      audience: env.JWT_AUDIENCE,
       refreshTokenTtlSeconds: env.REFRESH_TOKEN_TTL_SECONDS,
     },
     logLevel: env.LOG_LEVEL,

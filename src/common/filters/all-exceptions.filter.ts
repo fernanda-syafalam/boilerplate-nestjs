@@ -1,3 +1,4 @@
+import { STATUS_CODES } from 'node:http';
 import {
   type ArgumentsHost,
   Catch,
@@ -18,6 +19,14 @@ interface ProblemDetails {
   instance: string;
   errors?: unknown;
   requestId?: string;
+  [extension: string]: unknown;
+}
+
+/** Members owned by the problem body itself; never copied from the exception. */
+const RESERVED_MEMBERS = new Set(['message', 'error', 'statusCode', 'status']);
+
+function extensionMembers(obj: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(obj).filter(([key]) => !RESERVED_MEMBERS.has(key)));
 }
 
 /** Maps every error to application/problem+json. */
@@ -36,6 +45,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let title = 'Internal Server Error';
     let detail: string | undefined;
     let errors: unknown;
+    let extensions: Record<string, unknown> = {};
 
     if (exception instanceof ZodError) {
       status = HttpStatus.BAD_REQUEST;
@@ -50,12 +60,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
         if (typeof obj.message === 'string') title = obj.message;
         if (typeof obj.detail === 'string') detail = obj.detail;
         if ('errors' in obj) errors = obj.errors;
+        extensions = extensionMembers(obj);
       }
-    } else if (exception instanceof Error) {
+      // 5xx messages may carry internals; expose only the standard phrase.
+      if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+        title = STATUS_CODES[status] ?? 'Internal Server Error';
+      }
+    }
+
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error({ err: exception }, 'unhandled exception');
     }
 
     const body: ProblemDetails = {
+      ...extensions,
       type: `https://errors.example.com/${status}`,
       title,
       status,

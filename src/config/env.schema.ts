@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const envSchema = z.object({
+const envObject = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
 
@@ -14,6 +14,8 @@ export const envSchema = z.object({
 
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('15m'),
+  JWT_ISSUER: z.string().min(1).default('boilerplate-nestjs'),
+  JWT_AUDIENCE: z.string().min(1).default('boilerplate-nestjs'),
   // Opaque token, not a JWT; this value is the Redis TTL.
   REFRESH_TOKEN_TTL_SECONDS: z.coerce
     .number()
@@ -23,7 +25,14 @@ export const envSchema = z.object({
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 
-  CORS_ORIGINS: z.string().default('http://localhost:5173'),
+  // Credentials are enabled, so a wildcard origin would be unsafe.
+  CORS_ORIGINS: z
+    .string()
+    .default('http://localhost:5173')
+    .refine((v) => !v.includes('*'), 'CORS_ORIGINS must not contain wildcards'),
+
+  // Proxy hops to trust for X-Forwarded-For; 0 trusts none.
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
 
   COOKIE_SECURE: z
     .string()
@@ -38,5 +47,30 @@ export const envSchema = z.object({
   OTEL_SERVICE_NAME: z.string().min(1).default('boilerplate-nestjs'),
   SERVICE_VERSION: z.string().default('0.0.0'),
 });
+
+export const envSchema = envObject.superRefine((env, ctx) => {
+  if (env.NODE_ENV === 'production' && !env.COOKIE_SECURE) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['COOKIE_SECURE'],
+      message: 'COOKIE_SECURE must be true in production',
+    });
+  }
+  if (env.COOKIE_SAMESITE === 'none' && !env.COOKIE_SECURE) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['COOKIE_SECURE'],
+      message: 'COOKIE_SAMESITE=none requires COOKIE_SECURE=true',
+    });
+  }
+});
+
+let cachedEnv: Env | undefined;
+
+/** Single parse path; memoized so config and bootstrap never re-parse. */
+export function parseEnv(): Env {
+  cachedEnv ??= envSchema.parse(process.env);
+  return cachedEnv;
+}
 
 export type Env = z.infer<typeof envSchema>;

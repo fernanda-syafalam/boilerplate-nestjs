@@ -19,7 +19,7 @@ describe('EmailProcessor', () => {
         to: 'a@b.test',
         templateId: 'order-confirm',
         variables: { x: '1' },
-        idempotencyKey: 'order-confirm:1',
+        idempotencyKey: 'order-confirm-1',
       }),
     );
 
