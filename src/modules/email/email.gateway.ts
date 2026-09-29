@@ -1,17 +1,22 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
+import { z } from 'zod';
 
-export interface SendEmailRequest {
-  to: string;
-  templateId: string;
-  variables: Record<string, string>;
-}
+export const SendEmailRequestSchema = z.object({
+  to: z.email(),
+  templateId: z.string().min(1),
+  variables: z.record(z.string(), z.string()),
+  idempotencyKey: z.string().min(1),
+});
+
+export type SendEmailRequest = z.infer<typeof SendEmailRequestSchema>;
 
 export interface SendEmailResult {
   messageId: string;
 }
 
-/** Port; swap LoggingEmailGateway for a real provider adapter. */
+/** Port; adapters MUST forward idempotencyKey as the provider's idempotency key so a retry after a successful send is safe. */
 export abstract class EmailGateway {
   abstract send(req: SendEmailRequest): Promise<SendEmailResult>;
 }
@@ -24,9 +29,9 @@ export class LoggingEmailGateway extends EmailGateway {
   }
 
   async send(req: SendEmailRequest): Promise<SendEmailResult> {
-    const messageId = `local-${Date.now()}`;
+    const messageId = `local-${randomUUID()}`;
     this.logger.info(
-      { to: req.to, templateId: req.templateId, messageId },
+      { templateId: req.templateId, messageId, idempotencyKey: req.idempotencyKey },
       'email gateway: pretending to send',
     );
     return { messageId };

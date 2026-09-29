@@ -2,6 +2,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
+import { PinoLogger } from 'nestjs-pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { User } from '../../infrastructure/database/schema/users.schema';
 import { PasswordHasher } from '../../infrastructure/security/password-hasher';
@@ -12,7 +13,7 @@ import { RefreshTokenService } from './refresh-token.service';
 describe('AuthService', () => {
   let service: AuthService;
   let repo: {
-    findByEmail: ReturnType<typeof vi.fn>;
+    findActiveByEmail: ReturnType<typeof vi.fn>;
     findActiveById: ReturnType<typeof vi.fn>;
   };
   let jwt: { signAsync: ReturnType<typeof vi.fn> };
@@ -37,7 +38,7 @@ describe('AuthService', () => {
       updatedAt: new Date('2026-01-01T00:00:00Z'),
       deletedAt: null,
     };
-    repo = { findByEmail: vi.fn(), findActiveById: vi.fn() };
+    repo = { findActiveByEmail: vi.fn(), findActiveById: vi.fn() };
     jwt = { signAsync: vi.fn().mockResolvedValue('signed.jwt.value') };
     refresh = {
       mint: vi.fn().mockResolvedValue({ token: 'refresh-A', expiresInSeconds: 604_800 }),
@@ -52,6 +53,7 @@ describe('AuthService', () => {
         { provide: UsersService, useValue: repo },
         { provide: JwtService, useValue: jwt },
         { provide: RefreshTokenService, useValue: refresh },
+        { provide: PinoLogger, useValue: { warn: vi.fn(), setContext: vi.fn() } },
       ],
     }).compile();
     service = moduleRef.get(AuthService);
@@ -59,7 +61,7 @@ describe('AuthService', () => {
 
   describe('login', () => {
     it('returns access + refresh token pair on valid credentials', async () => {
-      repo.findByEmail.mockResolvedValue(user);
+      repo.findActiveByEmail.mockResolvedValue(user);
       const out = await service.login(user.email, password);
       expect(out.accessToken).toBe('signed.jwt.value');
       expect(out.refreshToken).toBe('refresh-A');
@@ -70,15 +72,12 @@ describe('AuthService', () => {
         fullName: user.fullName,
         role: user.role,
       });
-      expect(jwt.signAsync).toHaveBeenCalledWith({
-        sub: user.id,
-        role: user.role,
-      });
+      expect(jwt.signAsync).toHaveBeenCalledWith({ sub: user.id });
       expect(refresh.mint).toHaveBeenCalledWith(user.id);
     });
 
     it('rejects with 401 when email is unknown', async () => {
-      repo.findByEmail.mockResolvedValue(null);
+      repo.findActiveByEmail.mockResolvedValue(null);
       await expect(service.login('nope@b.test', password)).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
@@ -87,7 +86,7 @@ describe('AuthService', () => {
     });
 
     it('rejects with 401 when password does not match', async () => {
-      repo.findByEmail.mockResolvedValue(user);
+      repo.findActiveByEmail.mockResolvedValue(user);
       await expect(service.login(user.email, 'wrong-password')).rejects.toBeInstanceOf(
         UnauthorizedException,
       );

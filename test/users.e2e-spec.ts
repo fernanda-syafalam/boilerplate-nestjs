@@ -31,16 +31,16 @@ function makeUser(id: string, email: string, role: User['role']): User {
 class FakeUsersRepository {
   readonly rows = new Map<string, User>();
 
-  async findById(id: string) {
+  async findActiveById(id: string) {
     return this.rows.get(id) ?? null;
   }
 
-  async findByEmail(email: string) {
+  async findActiveByEmail(email: string) {
     return [...this.rows.values()].find((u) => u.email === email) ?? null;
   }
 
   async create(input: NewUser) {
-    if (await this.findByEmail(input.email)) return null;
+    if (await this.findActiveByEmail(input.email)) return null;
     const user: User = {
       ...makeUser(crypto.randomUUID(), input.email, input.role ?? 'customer'),
       fullName: input.fullName,
@@ -51,7 +51,7 @@ class FakeUsersRepository {
   }
 
   async listPage() {
-    return { items: [...this.rows.values()], nextCursor: null };
+    return { items: [...this.rows.values()], hasMore: false };
   }
 
   async softDelete(id: string) {

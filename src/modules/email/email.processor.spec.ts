@@ -1,12 +1,11 @@
-import type { Job } from 'bullmq';
+import { type Job, UnrecoverableError } from 'bullmq';
 import type { PinoLogger } from 'nestjs-pino';
 import { describe, expect, it, vi } from 'vitest';
-import { EmailGateway } from './email.gateway';
+import { EmailGateway, type SendEmailRequest } from './email.gateway';
 import { EmailProcessor } from './email.processor';
-import type { SendEmailJob } from './email.service';
 
-function fakeJob(data: SendEmailJob): Job<SendEmailJob> {
-  return { id: 'j-1', data, attemptsMade: 0 } as unknown as Job<SendEmailJob>;
+function fakeJob(data: unknown): Job<SendEmailRequest> {
+  return { id: 'j-1', data, attemptsMade: 0 } as unknown as Job<SendEmailRequest>;
 }
 
 const logger = { info: vi.fn(), error: vi.fn(), setContext: vi.fn() };
@@ -31,7 +30,19 @@ describe('EmailProcessor', () => {
       to: 'a@b.test',
       templateId: 'order-confirm',
       variables: { x: '1' },
+      idempotencyKey: 'order-confirm-1',
     });
+  });
+
+  it('rejects a malformed payload with UnrecoverableError and never calls the gateway', async () => {
+    const send = vi.fn();
+    const gateway: Pick<EmailGateway, 'send'> = { send };
+    const processor = new EmailProcessor(gateway as EmailGateway, logger as unknown as PinoLogger);
+
+    await expect(
+      processor.process(fakeJob({ to: 'not-an-email', templateId: '', variables: {} })),
+    ).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('propagates gateway errors so BullMQ can retry', async () => {
@@ -45,7 +56,7 @@ describe('EmailProcessor', () => {
           to: 'a@b.test',
           templateId: 'order-confirm',
           variables: {},
-          idempotencyKey: 'order-confirm:2',
+          idempotencyKey: 'order-confirm-2',
         }),
       ),
     ).rejects.toThrow('SMTP down');

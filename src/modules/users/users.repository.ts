@@ -2,12 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { and, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../infrastructure/database/drizzle.service';
 import { type NewUser, type User, users } from '../../infrastructure/database/schema/users.schema';
-import { type CursorPayload, encodeCursor } from './users.cursor';
-
-export interface CursorPage<T> {
-  items: T[];
-  nextCursor: string | null;
-}
+import type { CursorPayload } from './users.cursor';
 
 @Injectable()
 export class UsersRepository {
@@ -17,7 +12,7 @@ export class UsersRepository {
     return this.drizzle.db;
   }
 
-  async findById(id: string): Promise<User | null> {
+  async findActiveById(id: string): Promise<User | null> {
     const [row] = await this.db
       .select()
       .from(users)
@@ -26,7 +21,7 @@ export class UsersRepository {
     return row ?? null;
   }
 
-  async findByEmail(email: string): Promise<User | null> {
+  async findActiveByEmail(email: string): Promise<User | null> {
     const [row] = await this.db
       .select()
       .from(users)
@@ -46,7 +41,10 @@ export class UsersRepository {
   }
 
   /** The (createdAt, id) tie-break keeps order stable. */
-  async listPage(cursor: CursorPayload | undefined, limit: number): Promise<CursorPage<User>> {
+  async listPage(
+    cursor: CursorPayload | undefined,
+    limit: number,
+  ): Promise<{ items: User[]; hasMore: boolean }> {
     const cursorPredicate = cursor
       ? or(
           lt(users.createdAt, new Date(cursor.createdAt)),
@@ -61,13 +59,7 @@ export class UsersRepository {
       .orderBy(desc(users.createdAt), desc(users.id))
       .limit(limit + 1);
 
-    const items = rows.slice(0, limit);
-    const last = items[items.length - 1];
-    const hasMore = rows.length > limit;
-    return {
-      items,
-      nextCursor: hasMore && last ? encodeCursor(last) : null,
-    };
+    return { items: rows.slice(0, limit), hasMore: rows.length > limit };
   }
 
   async softDelete(id: string): Promise<boolean> {

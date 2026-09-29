@@ -1,12 +1,11 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { z } from 'zod';
 import type { AppConfigService } from '../../config';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 
-interface StoredRefreshToken {
-  userId: string;
-}
+const StoredRefreshTokenSchema = z.object({ userId: z.uuid() });
 
 export interface MintedRefreshToken {
   token: string;
@@ -28,7 +27,7 @@ export class RefreshTokenService {
   async mint(userId: string): Promise<MintedRefreshToken> {
     const raw = randomBytes(32).toString('base64url');
     const key = this.redisKey(raw);
-    const payload: StoredRefreshToken = { userId };
+    const payload: z.infer<typeof StoredRefreshTokenSchema> = { userId };
     const expiresInSeconds = this.ttlSeconds();
     await this.redis.client.set(key, JSON.stringify(payload), 'EX', expiresInSeconds);
     return { token: raw, expiresInSeconds };
@@ -40,11 +39,23 @@ export class RefreshTokenService {
     if (!stored) {
       throw new UnauthorizedException('invalid refresh token');
     }
-    return (JSON.parse(stored) as StoredRefreshToken).userId;
+    const parsed = StoredRefreshTokenSchema.safeParse(this.parseJson(stored));
+    if (!parsed.success) {
+      throw new UnauthorizedException('invalid refresh token');
+    }
+    return parsed.data.userId;
   }
 
   async revoke(rawToken: string): Promise<void> {
     await this.redis.client.del(this.redisKey(rawToken));
+  }
+
+  private parseJson(raw: string): unknown {
+    try {
+      return JSON.parse(raw);
+    } catch (_err) {
+      return null;
+    }
   }
 
   private redisKey(rawToken: string): string {

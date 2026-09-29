@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DrizzleService } from '../../infrastructure/database/drizzle.service';
 import * as schema from '../../infrastructure/database/schema';
 import { type NewUser, users } from '../../infrastructure/database/schema/users.schema';
-import { decodeCursor } from './users.cursor';
+import { decodeCursor, encodeCursor } from './users.cursor';
 import { UsersRepository } from './users.repository';
 
 describe('UsersRepository (integration)', () => {
@@ -61,8 +61,8 @@ describe('UsersRepository (integration)', () => {
       passwordHash: 'hash',
     });
 
-    const byId = await repo.findById(created.id);
-    const byEmail = await repo.findByEmail('a@b.test');
+    const byId = await repo.findActiveById(created.id);
+    const byEmail = await repo.findActiveByEmail('a@b.test');
 
     expect(byId?.id).toBe(created.id);
     expect(byEmail?.id).toBe(created.id);
@@ -89,8 +89,8 @@ describe('UsersRepository (integration)', () => {
     expect(await repo.softDelete(created.id)).toBe(true);
     expect(await repo.softDelete(created.id)).toBe(false);
 
-    expect(await repo.findById(created.id)).toBeNull();
-    expect(await repo.findByEmail('sd@b.test')).toBeNull();
+    expect(await repo.findActiveById(created.id)).toBeNull();
+    expect(await repo.findActiveByEmail('sd@b.test')).toBeNull();
   });
 
   it('lists with stable cursor pagination', async () => {
@@ -104,16 +104,24 @@ describe('UsersRepository (integration)', () => {
 
     const page1 = await repo.listPage(undefined, 2);
     expect(page1.items).toHaveLength(2);
-    expect(page1.nextCursor).not.toBeNull();
+    expect(page1.hasMore).toBe(true);
 
-    const page2 = await repo.listPage(decodeCursor(page1.nextCursor ?? '') ?? undefined, 2);
+    const last1 = page1.items[1];
+    const page2 = await repo.listPage(
+      decodeCursor(last1 ? encodeCursor(last1) : '') ?? undefined,
+      2,
+    );
     expect(page2.items).toHaveLength(2);
 
     const page1Ids = new Set(page1.items.map((u) => u.id));
     expect(page2.items.every((u) => !page1Ids.has(u.id))).toBe(true);
 
-    const page3 = await repo.listPage(decodeCursor(page2.nextCursor ?? '') ?? undefined, 2);
+    const last2 = page2.items[1];
+    const page3 = await repo.listPage(
+      decodeCursor(last2 ? encodeCursor(last2) : '') ?? undefined,
+      2,
+    );
     expect(page3.items).toHaveLength(1);
-    expect(page3.nextCursor).toBeNull();
+    expect(page3.hasMore).toBe(false);
   });
 });

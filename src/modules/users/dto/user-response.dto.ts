@@ -15,7 +15,5 @@ export const UserPageResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 
-export type UserResponse = z.infer<typeof UserResponseSchema>;
-
 export class UserResponseDto extends createZodDto(UserResponseSchema) {}
 export class UserPageResponseDto extends createZodDto(UserPageResponseSchema) {}

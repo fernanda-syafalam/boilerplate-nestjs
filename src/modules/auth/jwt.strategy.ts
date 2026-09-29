@@ -5,6 +5,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { AuthUser } from '../../common/types/auth-user';
 import type { AppConfigService } from '../../config';
 import { UsersService } from '../users/users.service';
+import { JWT_ALGORITHM, jwtOptions } from './jwt-options';
 import type { JwtPayload } from './jwt-payload';
 import { toAuthUser } from './to-auth-user';
 
@@ -15,13 +16,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     @Inject(ConfigService) config: AppConfigService,
     private readonly users: UsersService,
   ) {
+    const { secret, issuer, audience } = jwtOptions(config);
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: config.get('app.jwt.secret', { infer: true }),
+      secretOrKey: secret,
       ignoreExpiration: false,
-      algorithms: ['HS256'],
-      issuer: config.get('app.jwt.issuer', { infer: true }),
-      audience: config.get('app.jwt.audience', { infer: true }),
+      algorithms: [JWT_ALGORITHM],
+      issuer,
+      audience,
     });
   }
 

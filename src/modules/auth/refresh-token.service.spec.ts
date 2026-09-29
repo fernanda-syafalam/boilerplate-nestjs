@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 import { RefreshTokenService } from './refresh-token.service';
 
+const USER_1 = '00000000-0000-4000-8000-000000000001';
+const USER_2 = '00000000-0000-4000-8000-000000000002';
+
 function makeFakeRedisClient() {
   const store = new Map<string, string>();
   return {
@@ -46,7 +49,7 @@ describe('RefreshTokenService', () => {
   });
 
   it('mints a base64url token and stores it under sha256(token)', async () => {
-    const { token, expiresInSeconds } = await service.mint('user-1');
+    const { token, expiresInSeconds } = await service.mint(USER_1);
     expect(typeof token).toBe('string');
     expect(token).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(expiresInSeconds).toBe(604_800);
@@ -58,9 +61,9 @@ describe('RefreshTokenService', () => {
   });
 
   it('consume returns the user id and invalidates the token (single use)', async () => {
-    const minted = await service.mint('user-1');
+    const minted = await service.mint(USER_1);
 
-    await expect(service.consume(minted.token)).resolves.toBe('user-1');
+    await expect(service.consume(minted.token)).resolves.toBe(USER_1);
     await expect(service.consume(minted.token)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
@@ -70,12 +73,23 @@ describe('RefreshTokenService', () => {
     );
   });
 
+  it.each(['not json', '{"userId":"not-a-uuid"}', '{}'])(
+    'rejects a corrupted stored value (%s) with 401',
+    async (corrupt) => {
+      const { token } = await service.mint(USER_1);
+      const key = [...client._store.keys()][0] ?? '';
+      client._store.set(key, corrupt);
+
+      await expect(service.consume(token)).rejects.toBeInstanceOf(UnauthorizedException);
+    },
+  );
+
   it('revoke is safe to call with an unknown token', async () => {
     await expect(service.revoke('nope')).resolves.toBeUndefined();
   });
 
   it('revoke invalidates a previously minted token', async () => {
-    const { token } = await service.mint('user-2');
+    const { token } = await service.mint(USER_2);
     await service.revoke(token);
     await expect(service.consume(token)).rejects.toBeInstanceOf(UnauthorizedException);
   });

@@ -21,7 +21,7 @@ describe('Auth (e2e)', () => {
       type: argon2.argon2id,
     });
     storedUser = {
-      id: '00000000-0000-0000-0000-000000000001',
+      id: '00000000-0000-4000-8000-000000000001',
       email: 'alice@b.test',
       fullName: 'Alice',
       passwordHash,
@@ -32,8 +32,10 @@ describe('Auth (e2e)', () => {
     };
 
     const fakeRepo = {
-      findById: vi.fn(async (id: string) => (id === storedUser.id ? storedUser : null)),
-      findByEmail: vi.fn(async (email: string) => (email === storedUser.email ? storedUser : null)),
+      findActiveById: vi.fn(async (id: string) => (id === storedUser.id ? storedUser : null)),
+      findActiveByEmail: vi.fn(async (email: string) =>
+        email === storedUser.email ? storedUser : null,
+      ),
       create: vi.fn(),
       listPage: vi.fn(),
       softDelete: vi.fn(),
@@ -109,9 +111,18 @@ describe('Auth (e2e)', () => {
       headers: { 'content-type': 'application/json' },
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { accessToken: string; user: { id: string } };
+    const body = res.json() as { accessToken: string; user: unknown };
+    expect(Object.keys(body).sort()).toEqual(['accessToken', 'user']);
     expect(typeof body.accessToken).toBe('string');
-    expect(body.user.id).toBe(storedUser.id);
+    expect(body.user).toEqual({
+      id: storedUser.id,
+      email: storedUser.email,
+      fullName: storedUser.fullName,
+      role: storedUser.role,
+    });
+    const payload = app.get(JwtService).decode(body.accessToken) as Record<string, unknown>;
+    expect(payload.sub).toBe(storedUser.id);
+    expect(payload).not.toHaveProperty('role');
   });
 
   it('POST /v1/auth/login returns 401 on bad password', async () => {
@@ -131,10 +142,7 @@ describe('Auth (e2e)', () => {
 
   it('GET /v1/auth/me returns the current user when the bearer is valid', async () => {
     const jwt = app.get(JwtService);
-    const token = await jwt.signAsync({
-      sub: storedUser.id,
-      role: storedUser.role,
-    });
+    const token = await jwt.signAsync({ sub: storedUser.id });
 
     const res = await app.inject({
       method: 'GET',
@@ -152,10 +160,7 @@ describe('Auth (e2e)', () => {
 
   it('GET /v1/auth/me returns 401 for a token signed with the right secret but wrong audience', async () => {
     const jwt = app.get(JwtService);
-    const token = await jwt.signAsync(
-      { sub: storedUser.id, role: storedUser.role },
-      { audience: 'someone-else' },
-    );
+    const token = await jwt.signAsync({ sub: storedUser.id }, { audience: 'someone-else' });
 
     const res = await app.inject({
       method: 'GET',

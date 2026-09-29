@@ -22,8 +22,8 @@ const sampleUser: User = {
 describe('UsersService', () => {
   let service: UsersService;
   let repo: {
-    findById: ReturnType<typeof vi.fn>;
-    findByEmail: ReturnType<typeof vi.fn>;
+    findActiveById: ReturnType<typeof vi.fn>;
+    findActiveByEmail: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     listPage: ReturnType<typeof vi.fn>;
     softDelete: ReturnType<typeof vi.fn>;
@@ -31,8 +31,8 @@ describe('UsersService', () => {
 
   beforeEach(async () => {
     repo = {
-      findById: vi.fn(),
-      findByEmail: vi.fn(),
+      findActiveById: vi.fn(),
+      findActiveByEmail: vi.fn(),
       create: vi.fn(),
       listPage: vi.fn(),
       softDelete: vi.fn(),
@@ -87,14 +87,14 @@ describe('UsersService', () => {
     });
 
     it('lets a user read themself', async () => {
-      repo.findById.mockResolvedValue(sampleUser);
+      repo.findActiveById.mockResolvedValue(sampleUser);
       await expect(
         service.findVisibleTo(sampleUser.id, actor(sampleUser.id, 'customer')),
       ).resolves.toBe(sampleUser);
     });
 
     it('lets an admin read anyone', async () => {
-      repo.findById.mockResolvedValue(sampleUser);
+      repo.findActiveById.mockResolvedValue(sampleUser);
       await expect(service.findVisibleTo(sampleUser.id, actor('other', 'admin'))).resolves.toBe(
         sampleUser,
       );
@@ -104,11 +104,11 @@ describe('UsersService', () => {
       await expect(
         service.findVisibleTo(sampleUser.id, actor('other', 'customer')),
       ).rejects.toBeInstanceOf(NotFoundException);
-      expect(repo.findById).not.toHaveBeenCalled();
+      expect(repo.findActiveById).not.toHaveBeenCalled();
     });
 
     it('404s when the user is missing', async () => {
-      repo.findById.mockResolvedValue(null);
+      repo.findActiveById.mockResolvedValue(null);
       await expect(service.findVisibleTo('gone', actor('gone', 'customer'))).rejects.toBeInstanceOf(
         NotFoundException,
       );

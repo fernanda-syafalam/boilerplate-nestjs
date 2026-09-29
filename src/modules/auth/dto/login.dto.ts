@@ -8,6 +8,4 @@ export const LoginSchema = z
   })
   .strict();
 
-export type LoginInput = z.infer<typeof LoginSchema>;
-
 export class LoginDto extends createZodDto(LoginSchema) {}

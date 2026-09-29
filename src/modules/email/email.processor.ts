@@ -1,9 +1,8 @@
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
-import type { Job } from 'bullmq';
+import { type Job, UnrecoverableError } from 'bullmq';
 import { PinoLogger } from 'nestjs-pino';
 import { EMAIL_QUEUE } from './email.constants';
-import { EmailGateway } from './email.gateway';
-import type { SendEmailJob } from './email.service';
+import { EmailGateway, type SendEmailRequest, SendEmailRequestSchema } from './email.gateway';
 
 // IO-bound; tune concurrency to the gateway rate limit.
 @Processor(EMAIL_QUEUE, { concurrency: 10 })
@@ -16,21 +15,21 @@ export class EmailProcessor extends WorkerHost {
     this.logger.setContext(EmailProcessor.name);
   }
 
-  async process(job: Job<SendEmailJob>): Promise<{ messageId: string }> {
-    const result = await this.gateway.send({
-      to: job.data.to,
-      templateId: job.data.templateId,
-      variables: job.data.variables,
-    });
+  async process(job: Job<SendEmailRequest>): Promise<{ messageId: string }> {
+    const parsed = SendEmailRequestSchema.safeParse(job.data);
+    if (!parsed.success) {
+      throw new UnrecoverableError('invalid email job payload');
+    }
+    const result = await this.gateway.send(parsed.data);
     this.logger.info(
-      { jobId: job.id, idempotencyKey: job.data.idempotencyKey, messageId: result.messageId },
+      { jobId: job.id, idempotencyKey: parsed.data.idempotencyKey, messageId: result.messageId },
       'email sent',
     );
     return result;
   }
 
   @OnWorkerEvent('failed')
-  onFailed(job: Job<SendEmailJob>, err: Error): void {
+  onFailed(job: Job<SendEmailRequest>, err: Error): void {
     this.logger.error(
       {
         jobId: job.id,

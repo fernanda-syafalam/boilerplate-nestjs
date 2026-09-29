@@ -10,10 +10,17 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { ZodSerializerDto } from 'nestjs-zod';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import type { AuthUser } from '../../common/types/auth-user';
 import { AuthService } from './auth.service';
+import {
+  type AuthResponse,
+  AuthResponseDto,
+  type AuthUserBody,
+  AuthUserDto,
+} from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
 
 type CookieRequest = FastifyRequest & { cookies: Record<string, string | undefined> };
@@ -28,10 +35,11 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @ZodSerializerDto(AuthResponseDto)
   async login(
     @Body() body: LoginDto,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<{ accessToken: string; user: AuthUser }> {
+  ): Promise<AuthResponse> {
     const result = await this.auth.login(body.email, body.password);
     this.setRefreshCookie(reply, result.refreshToken, result.refreshExpiresInSeconds);
     return { accessToken: result.accessToken, user: result.user };
@@ -41,10 +49,11 @@ export class AuthController {
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @ZodSerializerDto(AuthResponseDto)
   async refresh(
     @Req() req: CookieRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<{ accessToken: string; user: AuthUser }> {
+  ): Promise<AuthResponse> {
     const rawToken = req.cookies[REFRESH_COOKIE];
     if (!rawToken) {
       throw new UnauthorizedException('refresh token cookie missing');
@@ -70,7 +79,8 @@ export class AuthController {
   }
 
   @Get('me')
-  me(@CurrentUser() user: AuthUser): AuthUser {
+  @ZodSerializerDto(AuthUserDto)
+  me(@CurrentUser() user: AuthUser): AuthUserBody {
     return user;
   }
 

@@ -4,9 +4,13 @@ import type { AuthUser } from '../../common/types/auth-user';
 import type { User } from '../../infrastructure/database/schema/users.schema';
 import { PasswordHasher } from '../../infrastructure/security/password-hasher';
 import type { CreateUserInput } from './dto/create-user.dto';
-import type { CursorPayload } from './users.cursor';
-import type { CursorPage } from './users.repository';
+import { type CursorPayload, encodeCursor } from './users.cursor';
 import { UsersRepository } from './users.repository';
+
+export interface CursorPage<T> {
+  items: T[];
+  nextCursor: string | null;
+}
 
 @Injectable()
 export class UsersService {
@@ -33,22 +37,25 @@ export class UsersService {
   }
 
   findActiveById(id: string): Promise<User | null> {
-    return this.repo.findById(id);
+    return this.repo.findActiveById(id);
   }
 
-  findByEmail(email: string): Promise<User | null> {
-    return this.repo.findByEmail(email);
+  findActiveByEmail(email: string): Promise<User | null> {
+    return this.repo.findActiveByEmail(email);
   }
 
   /** Admins see anyone; others only themselves. 404 (not 403) avoids user enumeration. */
   async findVisibleTo(id: string, actor: AuthUser): Promise<User> {
-    const user = actor.role === 'admin' || actor.id === id ? await this.repo.findById(id) : null;
+    const user =
+      actor.role === 'admin' || actor.id === id ? await this.repo.findActiveById(id) : null;
     if (!user) throw new NotFoundException('user not found');
     return user;
   }
 
-  list(cursor: CursorPayload | undefined, limit: number): Promise<CursorPage<User>> {
-    return this.repo.listPage(cursor, limit);
+  async list(cursor: CursorPayload | undefined, limit: number): Promise<CursorPage<User>> {
+    const { items, hasMore } = await this.repo.listPage(cursor, limit);
+    const last = items[items.length - 1];
+    return { items, nextCursor: hasMore && last ? encodeCursor(last) : null };
   }
 
   async softDelete(id: string): Promise<void> {
