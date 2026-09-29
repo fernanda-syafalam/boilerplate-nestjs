@@ -8,3 +8,4 @@ data:
   LOG_LEVEL: info
   DATABASE_POOL_SIZE: "10"
   JWT_EXPIRES_IN: 15m
+  TRUST_PROXY_HOPS: "1" # API sits behind an ingress
