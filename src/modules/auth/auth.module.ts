@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import type { AppConfig } from '../../config/configuration';
+import { SecurityModule } from '../../infrastructure/security/security.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -13,16 +14,18 @@ import { RefreshTokenService } from './refresh-token.service';
   imports: [
     PassportModule,
     JwtModule.registerAsync({
-      imports: [ConfigModule, UsersModule],
+      imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService<{ app: AppConfig }, true>) => ({
         secret: config.get('app.jwt.secret', { infer: true }),
         signOptions: {
+          algorithm: 'HS256' as const,
           expiresIn: config.get('app.jwt.expiresIn', { infer: true }),
         },
       }),
     }),
     UsersModule,
+    SecurityModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, RefreshTokenService],

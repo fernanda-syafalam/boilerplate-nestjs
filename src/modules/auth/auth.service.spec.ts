@@ -4,7 +4,8 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { User } from '../../infrastructure/database/schema/users.schema';
-import { UsersRepository } from '../users/users.repository';
+import { PasswordHasher } from '../../infrastructure/security/password-hasher';
+import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { RefreshTokenService } from './refresh-token.service';
 
@@ -12,12 +13,12 @@ describe('AuthService', () => {
   let service: AuthService;
   let repo: {
     findByEmail: ReturnType<typeof vi.fn>;
-    findById: ReturnType<typeof vi.fn>;
+    findActiveById: ReturnType<typeof vi.fn>;
   };
   let jwt: { signAsync: ReturnType<typeof vi.fn> };
   let refresh: {
     mint: ReturnType<typeof vi.fn>;
-    rotate: ReturnType<typeof vi.fn>;
+    consume: ReturnType<typeof vi.fn>;
     revoke: ReturnType<typeof vi.fn>;
   };
 
@@ -36,18 +37,19 @@ describe('AuthService', () => {
       updatedAt: new Date('2026-01-01T00:00:00Z'),
       deletedAt: null,
     };
-    repo = { findByEmail: vi.fn(), findById: vi.fn() };
+    repo = { findByEmail: vi.fn(), findActiveById: vi.fn() };
     jwt = { signAsync: vi.fn().mockResolvedValue('signed.jwt.value') };
     refresh = {
       mint: vi.fn().mockResolvedValue({ token: 'refresh-A', expiresInSeconds: 604_800 }),
-      rotate: vi.fn(),
+      consume: vi.fn(),
       revoke: vi.fn(),
     };
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        { provide: UsersRepository, useValue: repo },
+        PasswordHasher,
+        { provide: UsersService, useValue: repo },
         { provide: JwtService, useValue: jwt },
         { provide: RefreshTokenService, useValue: refresh },
       ],
@@ -95,33 +97,32 @@ describe('AuthService', () => {
   });
 
   describe('refresh', () => {
-    it('rotates the refresh token and returns a fresh pair', async () => {
-      refresh.rotate.mockResolvedValue({
-        userId: user.id,
-        refresh: { token: 'refresh-B', expiresInSeconds: 604_800 },
+    it('consumes the refresh token and returns a fresh pair', async () => {
+      refresh.consume.mockResolvedValue(user.id);
+      refresh.mint.mockResolvedValue({
+        token: 'refresh-B',
+        expiresInSeconds: 604_800,
       });
-      repo.findById.mockResolvedValue(user);
+      repo.findActiveById.mockResolvedValue(user);
 
       const out = await service.refresh('refresh-A');
 
-      expect(refresh.rotate).toHaveBeenCalledWith('refresh-A');
+      expect(refresh.consume).toHaveBeenCalledWith('refresh-A');
       expect(out.refreshToken).toBe('refresh-B');
       expect(out.accessToken).toBe('signed.jwt.value');
       expect(out.user.id).toBe(user.id);
     });
 
-    it('rejects with 401 when the rotated user no longer exists', async () => {
-      refresh.rotate.mockResolvedValue({
-        userId: user.id,
-        refresh: { token: 'refresh-B', expiresInSeconds: 604_800 },
-      });
-      repo.findById.mockResolvedValue(null);
+    it('rejects with 401 and mints nothing when the user no longer exists', async () => {
+      refresh.consume.mockResolvedValue(user.id);
+      repo.findActiveById.mockResolvedValue(null);
 
       await expect(service.refresh('refresh-A')).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(refresh.mint).not.toHaveBeenCalled();
     });
 
-    it('lets RefreshTokenService.rotate raise (unknown / replayed token)', async () => {
-      refresh.rotate.mockRejectedValue(new UnauthorizedException('invalid refresh token'));
+    it('lets RefreshTokenService.consume raise (unknown / replayed token)', async () => {
+      refresh.consume.mockRejectedValue(new UnauthorizedException('invalid refresh token'));
       await expect(service.refresh('stale-token')).rejects.toBeInstanceOf(UnauthorizedException);
       expect(jwt.signAsync).not.toHaveBeenCalled();
     });

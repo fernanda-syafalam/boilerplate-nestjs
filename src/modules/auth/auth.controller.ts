@@ -10,8 +10,9 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { type AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import type { AuthUser } from '../../common/types/auth-user';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 

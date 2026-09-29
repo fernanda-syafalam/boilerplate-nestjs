@@ -1,12 +1,6 @@
 import { type ExecutionContext, createParamDecorator } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-
-export interface AuthUser {
-  id: string;
-  email: string;
-  fullName: string;
-  role: 'admin' | 'staff' | 'customer';
-}
+import type { AuthUser } from '../types/auth-user';
 
 export const CurrentUser = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): AuthUser => {

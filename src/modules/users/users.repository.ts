@@ -1,16 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { and, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../infrastructure/database/drizzle.service';
 import { type NewUser, type User, users } from '../../infrastructure/database/schema/users.schema';
+import { type CursorPayload, encodeCursor } from './users.cursor';
 
 export interface CursorPage<T> {
   items: T[];
   nextCursor: string | null;
-}
-
-interface CursorPayload {
-  id: string;
-  createdAt: string;
 }
 
 @Injectable()
@@ -39,21 +35,22 @@ export class UsersRepository {
     return row ?? null;
   }
 
-  async create(input: NewUser): Promise<User> {
-    const [row] = await this.db.insert(users).values(input).returning();
-    if (!row) {
-      throw new Error('users.insert returned no row');
-    }
-    return row;
+  /** Null when the email is taken (soft-deleted rows keep their email). */
+  async create(input: NewUser): Promise<User | null> {
+    const [row] = await this.db
+      .insert(users)
+      .values(input)
+      .onConflictDoNothing({ target: users.email })
+      .returning();
+    return row ?? null;
   }
 
   /** The (createdAt, id) tie-break keeps order stable. */
-  async listPage(cursor: string | undefined, limit: number): Promise<CursorPage<User>> {
-    const decoded = cursor ? decodeCursor(cursor) : null;
-    const cursorPredicate = decoded
+  async listPage(cursor: CursorPayload | undefined, limit: number): Promise<CursorPage<User>> {
+    const cursorPredicate = cursor
       ? or(
-          lt(users.createdAt, new Date(decoded.createdAt)),
-          and(eq(users.createdAt, new Date(decoded.createdAt)), lt(users.id, decoded.id)),
+          lt(users.createdAt, new Date(cursor.createdAt)),
+          and(eq(users.createdAt, new Date(cursor.createdAt)), lt(users.id, cursor.id)),
         )
       : undefined;
 
@@ -73,25 +70,12 @@ export class UsersRepository {
     };
   }
 
-  async softDelete(id: string): Promise<void> {
+  /** False when no active user matched. */
+  async softDelete(id: string): Promise<boolean> {
     const result = await this.db
       .update(users)
       .set({ deletedAt: sql`now()` })
       .where(and(eq(users.id, id), isNull(users.deletedAt)));
-    if (result.rowCount === 0) {
-      throw new NotFoundException('user not found');
-    }
+    return (result.rowCount ?? 0) > 0;
   }
-}
-
-function encodeCursor(u: Pick<User, 'id' | 'createdAt'>): string {
-  const payload: CursorPayload = {
-    id: u.id,
-    createdAt: u.createdAt.toISOString(),
-  };
-  return Buffer.from(JSON.stringify(payload)).toString('base64url');
-}
-
-function decodeCursor(s: string): CursorPayload {
-  return JSON.parse(Buffer.from(s, 'base64url').toString('utf8')) as CursorPayload;
 }

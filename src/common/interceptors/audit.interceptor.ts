@@ -9,7 +9,7 @@ import type { FastifyRequest } from 'fastify';
 import { PinoLogger } from 'nestjs-pino';
 import { type Observable, tap } from 'rxjs';
 import { AUDIT_KEY } from '../decorators/audit.decorator';
-import type { AuthUser } from '../decorators/current-user.decorator';
+import type { AuthUser } from '../types/auth-user';
 
 interface AuditEvent {
   audit: true;

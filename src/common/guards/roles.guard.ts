@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { FastifyRequest } from 'fastify';
-import type { AuthUser } from '../decorators/current-user.decorator';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+import type { AuthUser } from '../types/auth-user';
 
 /** Gotcha: @Public + @Roles on one handler means no req.user. */
 @Injectable()

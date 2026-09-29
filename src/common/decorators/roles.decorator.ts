@@ -1,5 +1,5 @@
 import { SetMetadata } from '@nestjs/common';
-import type { AuthUser } from './current-user.decorator';
+import type { AuthUser } from '../types/auth-user';
 
 export const ROLES_KEY = 'roles';
 

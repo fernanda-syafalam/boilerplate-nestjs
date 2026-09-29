@@ -34,16 +34,13 @@ export class RefreshTokenService {
     return { token: raw, expiresInSeconds };
   }
 
-  async rotate(rawToken: string): Promise<{ userId: string; refresh: MintedRefreshToken }> {
-    const key = this.redisKey(rawToken);
-    // Atomic, so concurrent rotations yield one winner.
-    const stored = await this.redis.client.getdel(key);
+  /** Single-use: GETDEL is atomic, so concurrent consumers yield one winner. */
+  async consume(rawToken: string): Promise<string> {
+    const stored = await this.redis.client.getdel(this.redisKey(rawToken));
     if (!stored) {
       throw new UnauthorizedException('invalid refresh token');
     }
-    const { userId } = JSON.parse(stored) as StoredRefreshToken;
-    const refresh = await this.mint(userId);
-    return { userId, refresh };
+    return (JSON.parse(stored) as StoredRefreshToken).userId;
   }
 
   async revoke(rawToken: string): Promise<void> {

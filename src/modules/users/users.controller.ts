@@ -8,21 +8,22 @@ import {
   Param,
   Post,
   Query,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ZodSerializerDto } from 'nestjs-zod';
-import { z } from 'zod';
+import { ZodSerializerDto, ZodSerializerInterceptor } from 'nestjs-zod';
 import { Audit } from '../../common/decorators/audit.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import type { AuthUser } from '../../common/types/auth-user';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UserResponseDto } from './dto/user-response.dto';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
+import { UserIdParamDto } from './dto/user-id-param.dto';
+import { UserPageResponseDto, UserResponseDto } from './dto/user-response.dto';
 import { UsersService } from './users.service';
 
-const CursorQuerySchema = z.object({
-  cursor: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-});
-
+// Not registered globally in AppModule, so @ZodSerializerDto would be a no-op without this.
+@UseInterceptors(ZodSerializerInterceptor)
 @Controller({ path: 'users', version: '1' })
 export class UsersController {
   constructor(private readonly users: UsersService) {}
@@ -37,27 +38,22 @@ export class UsersController {
 
   @Get(':id')
   @ZodSerializerDto(UserResponseDto)
-  findOne(@Param('id') id: string) {
-    return this.users.findById(id);
+  findOne(@Param() { id }: UserIdParamDto, @CurrentUser() actor: AuthUser) {
+    return this.users.findVisibleTo(id, actor);
   }
 
+  @Roles('admin')
   @Get()
-  async list(@Query() query: unknown) {
-    const { cursor, limit } = CursorQuerySchema.parse(query);
-    const page = await this.users.list(cursor, limit);
-    return {
-      items: page.items.map(
-        ({ passwordHash: _passwordHash, deletedAt: _deletedAt, ...rest }) => rest,
-      ),
-      nextCursor: page.nextCursor,
-    };
+  @ZodSerializerDto(UserPageResponseDto)
+  list(@Query() { cursor, limit }: ListUsersQueryDto) {
+    return this.users.list(cursor, limit);
   }
 
   @Roles('admin')
   @Audit('user.soft_delete')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id') id: string): Promise<void> {
+  remove(@Param() { id }: UserIdParamDto): Promise<void> {
     return this.users.softDelete(id);
   }
 }

@@ -58,21 +58,15 @@ describe('RefreshTokenService', () => {
     expect(onlyKey.startsWith('refresh:')).toBe(true);
   });
 
-  it('rotation returns a fresh token and invalidates the old one', async () => {
+  it('consume returns the user id and invalidates the token (single use)', async () => {
     const minted = await service.mint('user-1');
 
-    const first = await service.rotate(minted.token);
-    expect(first.userId).toBe('user-1');
-    expect(first.refresh.token).not.toBe(minted.token);
-
-    await expect(service.rotate(minted.token)).rejects.toBeInstanceOf(UnauthorizedException);
-
-    const second = await service.rotate(first.refresh.token);
-    expect(second.userId).toBe('user-1');
+    await expect(service.consume(minted.token)).resolves.toBe('user-1');
+    await expect(service.consume(minted.token)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('rejects an unknown refresh token with 401', async () => {
-    await expect(service.rotate('never-issued-token')).rejects.toBeInstanceOf(
+    await expect(service.consume('never-issued-token')).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
   });
@@ -84,6 +78,6 @@ describe('RefreshTokenService', () => {
   it('revoke invalidates a previously minted token', async () => {
     const { token } = await service.mint('user-2');
     await service.revoke(token);
-    await expect(service.rotate(token)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.consume(token)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

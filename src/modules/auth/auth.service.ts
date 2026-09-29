@@ -1,14 +1,12 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import * as argon2 from 'argon2';
-import type { AuthUser } from '../../common/decorators/current-user.decorator';
-import { UsersRepository } from '../users/users.repository';
-import { RefreshTokenService } from './refresh-token.service';
-
-interface JwtPayload {
-  sub: string;
-  role: AuthUser['role'];
-}
+import type { AuthUser } from '../../common/types/auth-user';
+import type { User } from '../../infrastructure/database/schema/users.schema';
+import { PasswordHasher } from '../../infrastructure/security/password-hasher';
+import { UsersService } from '../users/users.service';
+import type { JwtPayload } from './jwt-payload';
+import { type MintedRefreshToken, RefreshTokenService } from './refresh-token.service';
+import { toAuthUser } from './to-auth-user';
 
 /** refreshToken goes to the httpOnly cookie, never the JSON body. */
 export interface LoginResult {
@@ -21,53 +19,44 @@ export interface LoginResult {
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly usersRepo: UsersRepository,
+    private readonly users: UsersService,
+    private readonly hasher: PasswordHasher,
     private readonly jwt: JwtService,
     private readonly refreshTokens: RefreshTokenService,
   ) {}
 
   async login(email: string, password: string): Promise<LoginResult> {
-    const user = await this.usersRepo.findByEmail(email);
-    // Verify against a dummy hash when the user is missing so both paths look alike.
-    const fakeHash = '$argon2id$v=19$m=19456,t=2,p=1$placeholder$invalid';
-    const passwordOk = await argon2
-      .verify(user?.passwordHash ?? fakeHash, password)
-      .catch(() => false);
-    if (!user || !passwordOk) {
+    const user = await this.users.findByEmail(email);
+    if (!user) {
+      await this.hasher.verifyDummy(password);
       throw new UnauthorizedException('invalid credentials');
     }
-
-    const accessToken = await this.signAccess(user.id, user.role);
-    const refresh = await this.refreshTokens.mint(user.id);
-    return {
-      accessToken,
-      refreshToken: refresh.token,
-      refreshExpiresInSeconds: refresh.expiresInSeconds,
-      user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role },
-    };
+    if (!(await this.hasher.verify(user.passwordHash, password))) {
+      throw new UnauthorizedException('invalid credentials');
+    }
+    return this.issue(user, await this.refreshTokens.mint(user.id));
   }
 
   async refresh(rawRefreshToken: string): Promise<LoginResult> {
-    const { userId, refresh } = await this.refreshTokens.rotate(rawRefreshToken);
-    const user = await this.usersRepo.findById(userId);
+    const userId = await this.refreshTokens.consume(rawRefreshToken);
+    const user = await this.users.findActiveById(userId);
     if (!user) {
       throw new UnauthorizedException('invalid refresh token');
     }
-    const accessToken = await this.signAccess(user.id, user.role);
-    return {
-      accessToken,
-      refreshToken: refresh.token,
-      refreshExpiresInSeconds: refresh.expiresInSeconds,
-      user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role },
-    };
+    return this.issue(user, await this.refreshTokens.mint(user.id));
   }
 
   async logout(rawRefreshToken: string): Promise<void> {
     await this.refreshTokens.revoke(rawRefreshToken);
   }
 
-  private async signAccess(userId: string, role: AuthUser['role']): Promise<string> {
-    const payload: JwtPayload = { sub: userId, role };
-    return this.jwt.signAsync(payload);
+  private async issue(user: User, refresh: MintedRefreshToken): Promise<LoginResult> {
+    const payload: JwtPayload = { sub: user.id, role: user.role };
+    return {
+      accessToken: await this.jwt.signAsync(payload),
+      refreshToken: refresh.token,
+      refreshExpiresInSeconds: refresh.expiresInSeconds,
+      user: toAuthUser(user),
+    };
   }
 }

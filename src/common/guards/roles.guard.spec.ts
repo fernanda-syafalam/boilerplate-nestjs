@@ -1,7 +1,7 @@
 import { type ExecutionContext, ForbiddenException } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
 import { describe, expect, it, vi } from 'vitest';
-import type { AuthUser } from '../decorators/current-user.decorator';
+import type { AuthUser } from '../types/auth-user';
 import { RolesGuard } from './roles.guard';
 
 function fakeContext(user: Partial<AuthUser> | null): ExecutionContext {

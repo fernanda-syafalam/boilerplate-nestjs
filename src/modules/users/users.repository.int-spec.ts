@@ -4,7 +4,8 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DrizzleService } from '../../infrastructure/database/drizzle.service';
 import * as schema from '../../infrastructure/database/schema';
-import { users } from '../../infrastructure/database/schema/users.schema';
+import { type NewUser, users } from '../../infrastructure/database/schema/users.schema';
+import { decodeCursor } from './users.cursor';
 import { UsersRepository } from './users.repository';
 
 /** Needs Docker (Testcontainers). */
@@ -44,12 +45,18 @@ describe('UsersRepository (integration)', () => {
     await container.stop();
   });
 
+  async function createOrFail(input: NewUser) {
+    const row = await repo.create(input);
+    if (!row) throw new Error('unexpected email conflict');
+    return row;
+  }
+
   beforeEach(async () => {
     await db.delete(users);
   });
 
   it('creates and reads back by id and email', async () => {
-    const created = await repo.create({
+    const created = await createOrFail({
       email: 'a@b.test',
       fullName: 'A B',
       passwordHash: 'hash',
@@ -62,14 +69,26 @@ describe('UsersRepository (integration)', () => {
     expect(byEmail?.id).toBe(created.id);
   });
 
+  it('create returns null on a duplicate email, including a soft-deleted one', async () => {
+    const first = await createOrFail({ email: 'dup@b.test', fullName: 'D', passwordHash: 'hash' });
+    expect(
+      await repo.create({ email: 'dup@b.test', fullName: 'D2', passwordHash: 'h' }),
+    ).toBeNull();
+    await repo.softDelete(first.id);
+    expect(
+      await repo.create({ email: 'dup@b.test', fullName: 'D3', passwordHash: 'h' }),
+    ).toBeNull();
+  });
+
   it('soft delete hides the row from finders', async () => {
-    const created = await repo.create({
+    const created = await createOrFail({
       email: 'sd@b.test',
       fullName: 'Soft Delete',
       passwordHash: 'hash',
     });
 
-    await repo.softDelete(created.id);
+    expect(await repo.softDelete(created.id)).toBe(true);
+    expect(await repo.softDelete(created.id)).toBe(false);
 
     expect(await repo.findById(created.id)).toBeNull();
     expect(await repo.findByEmail('sd@b.test')).toBeNull();
@@ -78,7 +97,7 @@ describe('UsersRepository (integration)', () => {
   it('lists with stable cursor pagination', async () => {
     // Insert with explicit createdAt so ordering is deterministic.
     for (let i = 0; i < 5; i++) {
-      await repo.create({
+      await createOrFail({
         email: `u${i}@b.test`,
         fullName: `User ${i}`,
         passwordHash: 'hash',
@@ -89,13 +108,13 @@ describe('UsersRepository (integration)', () => {
     expect(page1.items).toHaveLength(2);
     expect(page1.nextCursor).not.toBeNull();
 
-    const page2 = await repo.listPage(page1.nextCursor ?? undefined, 2);
+    const page2 = await repo.listPage(decodeCursor(page1.nextCursor ?? '') ?? undefined, 2);
     expect(page2.items).toHaveLength(2);
 
     const page1Ids = new Set(page1.items.map((u) => u.id));
     expect(page2.items.every((u) => !page1Ids.has(u.id))).toBe(true);
 
-    const page3 = await repo.listPage(page2.nextCursor ?? undefined, 2);
+    const page3 = await repo.listPage(decodeCursor(page2.nextCursor ?? '') ?? undefined, 2);
     expect(page3.items).toHaveLength(1);
     expect(page3.nextCursor).toBeNull();
   });

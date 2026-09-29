@@ -2,6 +2,8 @@ import { index, pgEnum, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg
 
 export const userRole = pgEnum('user_role', ['admin', 'staff', 'customer']);
 
+export type UserRole = (typeof userRole.enumValues)[number];
+
 export const users = pgTable(
   'users',
   {
@@ -12,7 +14,10 @@ export const users = pgTable(
     role: userRole('role').notNull().default('customer'),
     // ms precision matches JS Date so cursor predicates never skip rows.
     createdAt: timestamp('created_at', { withTimezone: true, precision: 3 }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true, precision: 3 }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, precision: 3 })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
     deletedAt: timestamp('deleted_at', { withTimezone: true, precision: 3 }),
   },
   (t) => [index('users_created_at_id_idx').on(t.createdAt, t.id)],
