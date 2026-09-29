@@ -1,7 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import type { AppConfig } from '../../config/configuration';
+import type { AppConfigService } from '../../config';
 
 /** Capped removeOn* keeps Redis bounded; per-queue overrides go in registerQueue. */
 @Module({
@@ -9,7 +9,7 @@ import type { AppConfig } from '../../config/configuration';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService<{ app: AppConfig }, true>) => ({
+      useFactory: (config: AppConfigService) => ({
         connection: { url: config.get('app.redis.url', { infer: true }) },
         defaultJobOptions: {
           attempts: 3,

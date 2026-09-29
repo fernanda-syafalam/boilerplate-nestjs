@@ -11,18 +11,26 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
-import type { AppConfig } from './config/configuration';
+import type { AppConfigService } from './config';
+import { parseEnv } from './config/env.schema';
+
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
+
+function requestId(req: IncomingMessage | Http2ServerRequest): string {
+  const incoming = req.headers['x-request-id']?.toString();
+  return incoming && REQUEST_ID_PATTERN.test(incoming) ? incoming : randomUUID();
+}
 
 async function bootstrap(): Promise<void> {
+  const trustProxyHops = parseEnv().TRUST_PROXY_HOPS;
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({
       logger: false,
-      // Behind an ingress.
-      trustProxy: true,
+      // Trust only the known ingress hops; blanket true lets clients spoof X-Forwarded-For.
+      trustProxy: trustProxyHops === 0 ? false : trustProxyHops,
       bodyLimit: 1_048_576,
-      genReqId: (req: IncomingMessage | Http2ServerRequest) =>
-        req.headers['x-request-id']?.toString() ?? randomUUID(),
+      genReqId: requestId,
     }),
     // Keeps bootstrap lines in JSON once pino takes over.
     { bufferLogs: true },
@@ -34,7 +42,7 @@ async function bootstrap(): Promise<void> {
 
   app.enableShutdownHooks();
 
-  const config = app.get(ConfigService<{ app: AppConfig }, true>);
+  const config = app.get<AppConfigService>(ConfigService);
   const port = config.get('app.port', { infer: true });
   const corsOrigins = config.get('app.cors.origins', { infer: true });
   const cookieSecure = config.get('app.cookie.secure', { infer: true });

@@ -13,6 +13,7 @@ interface ProblemDetailsResponse {
   instance: string;
   requestId?: string;
   errors?: unknown;
+  checks?: unknown;
 }
 
 function fakeHost(opts: { url?: string; reqId?: string } = {}): {
@@ -112,5 +113,44 @@ describe('AllExceptionsFilter', () => {
     expect(body.title).toBe('Bad Request');
     expect(body.detail).toBe('fields are invalid');
     expect(body.errors).toEqual({ x: 'required' });
+  });
+
+  it('uses the reason phrase as title for a 5xx HttpException and logs it', () => {
+    const { host, status, send } = fakeHost();
+
+    filter.catch(new HttpException('pg password leaked', HttpStatus.BAD_GATEWAY), host);
+
+    expect(status).toHaveBeenCalledWith(502);
+    const body = send.mock.calls[0]?.[0] as ProblemDetailsResponse;
+    expect(body.title).toBe('Bad Gateway');
+    expect(logger.error).toHaveBeenCalledOnce();
+  });
+
+  it('logs and returns 500 for a thrown non-Error value', () => {
+    const { host, status, send } = fakeHost();
+
+    filter.catch('boom', host);
+
+    expect(status).toHaveBeenCalledWith(500);
+    const body = send.mock.calls[0]?.[0] as ProblemDetailsResponse;
+    expect(body.title).toBe('Internal Server Error');
+    expect(logger.error).toHaveBeenCalledOnce();
+  });
+
+  it('preserves extension members such as checks', () => {
+    const { host, send } = fakeHost();
+
+    filter.catch(
+      new HttpException(
+        { status: 'error', message: 'x', checks: { database: 'down', redis: 'ok' } },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      ),
+      host,
+    );
+
+    const body = send.mock.calls[0]?.[0] as ProblemDetailsResponse;
+    expect(body.checks).toEqual({ database: 'down', redis: 'ok' });
+    expect(body.status).toBe(503);
+    expect(body.title).toBe('Service Unavailable');
   });
 });

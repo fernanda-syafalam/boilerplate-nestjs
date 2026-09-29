@@ -34,13 +34,8 @@ export const otelSdk = new NodeSDK({
   ],
 });
 
-otelSdk.start();
-
-process.on('SIGTERM', () => {
-  otelSdk
-    .shutdown()
-    .catch(() => {
-      /* exiting anyway */
-    })
-    .finally(() => process.exit(0));
-});
+// No SIGTERM handler here: ObservabilityModule shuts down after Nest's hooks drain.
+// Skipped under vitest: the SDK's resource detectors probe the network and stall app.close().
+if (process.env.NODE_ENV !== 'test') {
+  otelSdk.start();
+}

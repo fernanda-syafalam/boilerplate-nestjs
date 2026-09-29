@@ -1,14 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
-import type { AppConfig } from '../../config/configuration';
+import type { AppConfigService } from '../../config';
 
 @Module({
   imports: [
     LoggerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService<{ app: AppConfig }, true>) => ({
+      useFactory: (config: AppConfigService) => ({
         pinoHttp: {
           level: config.get('app.logLevel', { infer: true }),
           autoLogging: true,
