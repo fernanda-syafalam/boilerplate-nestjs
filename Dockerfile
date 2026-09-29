@@ -44,6 +44,6 @@ COPY --from=build /app/package.json ./package.json
 USER nonroot
 EXPOSE 3000
 
-# Runs the API; run the worker from the same image with a different command:
-# `docker run <image> dist/worker.js`.
+# One image, three entrypoints: API (default), worker (`dist/worker.js`),
+# migrations (`dist/infrastructure/database/migrate.js`).
 CMD ["dist/main.js"]

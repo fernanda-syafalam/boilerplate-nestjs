@@ -48,6 +48,11 @@ spec:
                 name: boilerplate-nestjs-config
             - secretRef:
                 name: boilerplate-nestjs-secrets
+          # Distroless has no sleep: delay SIGTERM so endpoints are removed first.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/nodejs/bin/node", "-e", "setTimeout(()=>{},5000)"]
           resources:
             requests:
               cpu: 200m
