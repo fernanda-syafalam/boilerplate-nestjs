@@ -12,7 +12,6 @@ import { RedisService } from '../src/infrastructure/redis/redis.service';
 import { UsersRepository } from '../src/modules/users/users.repository';
 import { inMemoryThrottler } from './support/in-memory-throttler';
 
-/** UsersRepository is faked in memory: full pipeline, no Postgres. */
 describe('Auth (e2e)', () => {
   let app: NestFastifyApplication;
   let storedUser: User;

@@ -31,7 +31,6 @@ const envObject = z.object({
     .default('http://localhost:5173')
     .refine((v) => !v.includes('*'), 'CORS_ORIGINS must not contain wildcards'),
 
-  // Proxy hops to trust for X-Forwarded-For; 0 trusts none.
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
 
   COOKIE_SECURE: z
@@ -67,7 +66,6 @@ export const envSchema = envObject.superRefine((env, ctx) => {
 
 let cachedEnv: Env | undefined;
 
-/** Single parse path; memoized so config and bootstrap never re-parse. */
 export function parseEnv(): Env {
   cachedEnv ??= envSchema.parse(process.env);
   return cachedEnv;

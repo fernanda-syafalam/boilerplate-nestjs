@@ -70,7 +70,6 @@ export class UsersRepository {
     };
   }
 
-  /** False when no active user matched. */
   async softDelete(id: string): Promise<boolean> {
     const result = await this.db
       .update(users)

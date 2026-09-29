@@ -2,7 +2,6 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { userRole } from '../../../infrastructure/database/schema/users.schema';
 
-/** Undeclared fields are stripped by @ZodSerializerDto. */
 export const UserResponseSchema = z.object({
   id: z.uuid(),
   email: z.email(),

@@ -28,7 +28,6 @@ function makeUser(id: string, email: string, role: User['role']): User {
   };
 }
 
-/** In-memory UsersRepository: full HTTP pipeline, no Postgres. */
 class FakeUsersRepository {
   readonly rows = new Map<string, User>();
 

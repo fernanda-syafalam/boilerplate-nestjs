@@ -18,8 +18,7 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['./test/setup.ts'],
     include: ['src/**/*.spec.ts', 'test/**/*.e2e-spec.ts'],
-    // Integration tests are slower (Testcontainers ~5 s each) and need
-    // Docker; run them with `pnpm test:int` instead.
+    // Need Docker; run with `pnpm test:int`.
     exclude: ['**/node_modules/**', '**/dist/**', '**/*.int-spec.ts'],
     coverage: {
       provider: 'v8',
@@ -31,22 +30,16 @@ export default defineConfig({
         '**/main.ts',
         '**/*.module.ts',
         '**/*.dto.ts',
-        // Repositories and the Drizzle infra service are exercised by
-        // integration tests (`*.int-spec.ts`) which use Testcontainers;
-        // they are intentionally not part of the unit/e2e coverage
-        // gate. Run `pnpm test:int` for their coverage.
+        // Covered by `pnpm test:int` (Testcontainers).
         '**/*.repository.ts',
         '**/infrastructure/database/drizzle.service.ts',
-        // Tooling configs at repo root.
         'drizzle.config.ts',
         'vitest.config.ts',
         'vitest.int.config.ts',
         'dist/**',
         'coverage/**',
       ],
-      // Pragmatic thresholds for the boilerplate phase. v2 doc Pilar 5
-      // calls for 80% lines on production services; raise these when
-      // the codebase has more business logic to cover.
+      // Raise toward 80% lines as business logic grows.
       thresholds: {
         lines: 70,
         functions: 50,

@@ -1,12 +1,6 @@
 import swc from 'unplugin-swc';
 import { defineConfig } from 'vitest/config';
 
-/**
- * Integration test config — same SWC pipeline as vitest.config.ts but
- * scoped to *.int-spec.ts. These need Docker (Testcontainers) and are
- * slow, so they live behind `pnpm test:int` and are not part of the
- * default `pnpm test` run.
- */
 export default defineConfig({
   plugins: [
     swc.vite({
@@ -23,10 +17,7 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['./test/setup.ts'],
     include: ['src/**/*.int-spec.ts'],
-    // Integration tests share a Postgres container per file via
-    // beforeAll; running them in parallel would race on the shared
-    // database name unless we randomise it. Single thread keeps the
-    // boilerplate readable.
+    // Serial: every file uses the same database name.
     pool: 'forks',
     poolOptions: { forks: { singleFork: true } },
     testTimeout: 60_000,

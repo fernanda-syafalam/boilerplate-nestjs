@@ -22,7 +22,6 @@ interface ProblemDetails {
   [extension: string]: unknown;
 }
 
-/** Members owned by the problem body itself; never copied from the exception. */
 const RESERVED_MEMBERS = new Set(['message', 'error', 'statusCode', 'status']);
 
 /** Extension members that may reach the client on 5xx (e.g. /readyz dependency checks). */
@@ -38,7 +37,6 @@ function pickAllowed(obj: Record<string, unknown>): Record<string, unknown> {
   );
 }
 
-/** Maps every error to application/problem+json. */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   constructor(private readonly logger: PinoLogger) {

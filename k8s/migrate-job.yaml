@@ -20,7 +20,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: migrate
-          image: REPLACE_ME_IMAGE # same image as the Deployments
+          image: REPLACE_ME_IMAGE
           imagePullPolicy: IfNotPresent
           command: ["/nodejs/bin/node", "dist/infrastructure/database/migrate.js"]
           envFrom:

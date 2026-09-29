@@ -15,7 +15,6 @@ export function encodeCursor(u: { id: string; createdAt: Date }): string {
   return Buffer.from(JSON.stringify(payload)).toString('base64url');
 }
 
-/** Returns null for anything that is not a cursor we issued. */
 export function decodeCursor(s: string): CursorPayload | null {
   try {
     const parsed = CursorPayloadSchema.safeParse(

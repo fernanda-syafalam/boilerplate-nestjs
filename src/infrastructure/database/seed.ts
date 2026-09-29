@@ -6,7 +6,6 @@ import { type User, users } from './schema/users.schema';
 
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://app:app@localhost:5432/app';
 
-// Local development only.
 const DEV_PASSWORD = 'Passw0rd!2345';
 
 type SeedUser = Pick<User, 'email' | 'fullName' | 'role'>;

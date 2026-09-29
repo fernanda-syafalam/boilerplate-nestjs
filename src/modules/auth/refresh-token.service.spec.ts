@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 import { RefreshTokenService } from './refresh-token.service';
 
-/** In-memory ioredis stand-in: set EX, getdel, del. */
 function makeFakeRedisClient() {
   const store = new Map<string, string>();
   return {
@@ -49,7 +48,7 @@ describe('RefreshTokenService', () => {
   it('mints a base64url token and stores it under sha256(token)', async () => {
     const { token, expiresInSeconds } = await service.mint('user-1');
     expect(typeof token).toBe('string');
-    expect(token).toMatch(/^[A-Za-z0-9_-]+$/); // base64url alphabet
+    expect(token).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(expiresInSeconds).toBe(604_800);
     expect(client._store.size).toBe(1);
     // Key MUST not contain the raw token (defence against Redis-dump leaks).

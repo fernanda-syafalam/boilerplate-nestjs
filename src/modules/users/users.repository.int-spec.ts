@@ -8,7 +8,6 @@ import { type NewUser, users } from '../../infrastructure/database/schema/users.
 import { decodeCursor } from './users.cursor';
 import { UsersRepository } from './users.repository';
 
-/** Needs Docker (Testcontainers). */
 describe('UsersRepository (integration)', () => {
   let container: StartedPostgreSqlContainer;
   let pool: Pool;
@@ -95,7 +94,6 @@ describe('UsersRepository (integration)', () => {
   });
 
   it('lists with stable cursor pagination', async () => {
-    // Insert with explicit createdAt so ordering is deterministic.
     for (let i = 0; i < 5; i++) {
       await createOrFail({
         email: `u${i}@b.test`,

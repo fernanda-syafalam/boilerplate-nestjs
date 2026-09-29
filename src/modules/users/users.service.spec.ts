@@ -123,7 +123,6 @@ describe('UsersService', () => {
   });
 
   describe('hash compatibility', () => {
-    // Verifies the argon2 binding and params produce a verifiable hash.
     it('produces a hash that argon2.verify accepts', async () => {
       repo.create.mockImplementation(async (input) => ({
         ...sampleUser,

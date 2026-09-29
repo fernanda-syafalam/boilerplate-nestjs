@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: REPLACE_ME_IMAGE # same image as the API
+          image: REPLACE_ME_IMAGE
           imagePullPolicy: IfNotPresent
           command: ["/nodejs/bin/node", "dist/worker.js"]
           envFrom:

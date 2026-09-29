@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { EMAIL_QUEUE } from './email.constants';
 
-/** jobId = idempotencyKey (no ':' allowed by BullMQ), so BullMQ drops duplicates while the job is retained. */
+/** jobId = idempotencyKey so BullMQ drops duplicates; BullMQ rejects ':' in custom ids. */
 export interface SendEmailJob {
   to: string;
   templateId: string;

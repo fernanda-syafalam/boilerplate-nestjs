@@ -22,7 +22,6 @@ export class PasswordHasher implements OnModuleInit {
     return argon2.hash(plain, ARGON2_OPTIONS);
   }
 
-  /** Malformed stored hashes count as a mismatch. */
   verify(hash: string, plain: string): Promise<boolean> {
     return argon2.verify(hash, plain).catch(() => false);
   }

@@ -55,7 +55,6 @@ import { UsersModule } from './modules/users/users.module';
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     { provide: APP_PIPE, useClass: ZodValidationPipe },
-    // Applies @ZodSerializerDto; handlers without it pass through untouched.
     { provide: APP_INTERCEPTOR, useClass: ZodSerializerInterceptor },
   ],
 })

@@ -34,7 +34,6 @@ export const otelSdk = new NodeSDK({
   ],
 });
 
-// No SIGTERM handler here: registerGracefulShutdown closes Nest first, then flushes the SDK.
 // Skipped under vitest: the SDK's resource detectors probe the network and stall app.close().
 if (process.env.NODE_ENV !== 'test') {
   otelSdk.start();

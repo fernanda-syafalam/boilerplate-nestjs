@@ -19,8 +19,6 @@ spec:
       labels:
         app.kubernetes.io/name: boilerplate-nestjs
     spec:
-      # Spread replicas across nodes so a node failure does not take
-      # the whole service down.
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -30,7 +28,6 @@ spec:
                 labelSelector:
                   matchLabels:
                     app.kubernetes.io/name: boilerplate-nestjs
-      # Give in-flight HTTP requests time to drain on SIGTERM.
       terminationGracePeriodSeconds: 60
       securityContext:
         runAsNonRoot: true
@@ -60,7 +57,6 @@ spec:
             limits:
               cpu: 1000m
               memory: 512Mi
-          # Distroless: no shell, drop all caps, read-only root fs.
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -71,7 +67,7 @@ spec:
               path: /healthz
               port: http
             periodSeconds: 5
-            failureThreshold: 30 # 30 * 5 s = 150 s budget for cold start
+            failureThreshold: 30
           livenessProbe:
             httpGet:
               path: /healthz
