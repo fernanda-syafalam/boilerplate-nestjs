@@ -26,7 +26,8 @@ export function registerGracefulShutdown(
     } catch (err) {
       logger.warn({ err }, 'otel shutdown failed');
     }
-    process.exitCode = exitCode;
+    // A leftover socket would otherwise keep the pod alive until SIGKILL.
+    process.exit(exitCode);
   };
 
   for (const signal of SIGNALS) {
