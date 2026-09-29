@@ -141,7 +141,7 @@ docker run --rm -p 3000:3000 \
 ```
 
 The same image runs the API (default), the worker (`dist/worker.js`) and
-migrations (`dist/infrastructure/database/migrate.js`, run as a Job before
+migrations (`dist/infrastructure/database/scripts/migrate.js`, run as a Job before
 the rollout). Kubernetes manifests are in `k8s/` with: separate liveness/readiness probes, non-root, resource
 requests/limits, an HPA on CPU, and a `terminationGracePeriodSeconds`
 that gives in-flight work time to drain. Tag the image with the commit

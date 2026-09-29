@@ -1,4 +1,4 @@
-import type { AppConfigService } from '../../config';
+import type { AppConfigService } from '../../../config';
 
 export const JWT_ALGORITHM = 'HS256' as const;
 

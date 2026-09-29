@@ -5,9 +5,9 @@ import type { AuthUser } from '../../common/types/auth-user';
 import type { User } from '../../infrastructure/database/schema/users.schema';
 import { PasswordHasher } from '../../infrastructure/security/password-hasher';
 import { UsersService } from '../users/users.service';
-import type { JwtPayload } from './jwt-payload';
+import type { JwtPayload } from './jwt/jwt-payload';
+import { toAuthUser } from './jwt/to-auth-user';
 import { type MintedRefreshToken, RefreshTokenService } from './refresh-token.service';
-import { toAuthUser } from './to-auth-user';
 
 /** refreshToken goes to the httpOnly cookie, never the JSON body. */
 export interface LoginResult {

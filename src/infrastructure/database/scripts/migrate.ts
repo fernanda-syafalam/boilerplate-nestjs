@@ -5,7 +5,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
 
 // Same relative depth from src/ (tsx) and dist/ (compiled): <root>/drizzle.
-const MIGRATIONS_FOLDER = resolve(__dirname, '../../../drizzle');
+const MIGRATIONS_FOLDER = resolve(__dirname, '../../../../drizzle');
 
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;

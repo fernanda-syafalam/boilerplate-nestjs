@@ -1,5 +1,5 @@
-import type { AuthUser } from '../../common/types/auth-user';
-import type { User } from '../../infrastructure/database/schema/users.schema';
+import type { AuthUser } from '../../../common/types/auth-user';
+import type { User } from '../../../infrastructure/database/schema/users.schema';
 
 export function toAuthUser(user: User): AuthUser {
   return {

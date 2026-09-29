@@ -12,7 +12,7 @@
     "vitest.config.ts",
     "vitest.int.config.ts",
     "drizzle.config.ts",
-    "src/infrastructure/database/seed.ts",
+    "src/infrastructure/database/scripts/seed.ts",
     "**/*spec.ts",
     "**/*.int-spec.ts"
   ]

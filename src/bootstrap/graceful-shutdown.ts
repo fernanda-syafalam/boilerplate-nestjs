@@ -1,6 +1,6 @@
 import type { INestApplicationContext } from '@nestjs/common';
 import type { PinoLogger } from 'nestjs-pino';
-import { otelSdk } from './tracing';
+import { otelSdk } from '../observability/tracing';
 
 const SIGNALS: NodeJS.Signals[] = ['SIGTERM', 'SIGINT'];
 

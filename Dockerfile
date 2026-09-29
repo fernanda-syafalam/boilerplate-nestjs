@@ -44,5 +44,5 @@ USER nonroot
 EXPOSE 3000
 
 # One image, three entrypoints: API (default), worker (`dist/worker.js`),
-# migrations (`dist/infrastructure/database/migrate.js`).
+# migrations (`dist/infrastructure/database/scripts/migrate.js`).
 CMD ["dist/main.js"]

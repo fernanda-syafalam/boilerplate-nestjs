@@ -32,7 +32,7 @@ Tooling, infrastructure, and the first reference modules are in place:
   worker only). BullMQ custom job ids must not contain `:`
 - Shutdown: `registerGracefulShutdown` closes Nest, then flushes OTel, then exits
 - Ops: one image, three entrypoints — `dist/main.js`, `dist/worker.js`,
-  `dist/infrastructure/database/migrate.js` (k8s `migrate-job.yaml`)
+  `dist/infrastructure/database/scripts/migrate.js` (k8s `migrate-job.yaml`)
 - `AppModule` is a pure composition root
 
 | Aspect             | Current state                                | Target state                                            | Reference       |
@@ -92,7 +92,11 @@ src/
 ├── infrastructure/
 │   ├── database/schema/*.ts     # Drizzle pgTable schemas
 │   ├── database/drizzle.{service,module}.ts
+│   ├── database/scripts/        # migrate.ts (prod runtime), seed.ts (dev, not built)
+│   ├── security/                # password hasher
 │   ├── redis/, queue/, logger/
+├── bootstrap/                   # graceful shutdown shared by main.ts and worker.ts
+├── observability/               # OpenTelemetry tracing
 ├── app.module.ts                # composition root only
 └── main.ts                      # FastifyAdapter bootstrap
 ```
@@ -113,7 +117,7 @@ src/
 | Local DB up | `pnpm db:up` (docker compose Postgres)        |
 | DB down     | `pnpm db:down`                                |
 | DB migrate  | `pnpm db:generate` then `pnpm db:migrate`     |
-| DB migrate (prod image) | `node dist/infrastructure/database/migrate.js` |
+| DB migrate (prod image) | `node dist/infrastructure/database/scripts/migrate.js` |
 
 ## Agent routing (project override)
 

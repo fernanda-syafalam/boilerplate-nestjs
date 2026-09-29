@@ -11,9 +11,9 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger, PinoLogger } from 'nestjs-pino';
 import { AppModule } from './app.module';
+import { registerGracefulShutdown } from './bootstrap/graceful-shutdown';
 import type { AppConfigService } from './config';
 import { parseEnv } from './config/env.schema';
-import { registerGracefulShutdown } from './observability/graceful-shutdown';
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 

@@ -1,8 +1,8 @@
 /** Idempotent. Run `pnpm db:migrate` then `pnpm db:seed`; dev passwords are local only. */
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { PasswordHasher } from '../security/password-hasher';
-import { type User, users } from './schema/users.schema';
+import { PasswordHasher } from '../../security/password-hasher';
+import { type User, users } from '../schema/users.schema';
 
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://app:app@localhost:5432/app';
 

@@ -7,8 +7,8 @@ import { SecurityModule } from '../../infrastructure/security/security.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { JWT_ALGORITHM, jwtOptions } from './jwt-options';
-import { JwtStrategy } from './jwt.strategy';
+import { JWT_ALGORITHM, jwtOptions } from './jwt/jwt-options';
+import { JwtStrategy } from './jwt/jwt.strategy';
 import { RefreshTokenService } from './refresh-token.service';
 
 @Module({

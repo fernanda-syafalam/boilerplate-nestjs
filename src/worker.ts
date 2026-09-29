@@ -3,7 +3,7 @@ import './observability/tracing';
 
 import { NestFactory } from '@nestjs/core';
 import { Logger, PinoLogger } from 'nestjs-pino';
-import { registerGracefulShutdown } from './observability/graceful-shutdown';
+import { registerGracefulShutdown } from './bootstrap/graceful-shutdown';
 import { WorkerModule } from './worker.module';
 
 async function bootstrap(): Promise<void> {

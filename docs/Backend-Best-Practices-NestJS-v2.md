@@ -1267,7 +1267,7 @@ RolesGuard tidak tahu konteks resource. “Customer hanya boleh lihat order mili
 
 ### JwtStrategy
 
-*// src/modules/auth/jwt.strategy.ts*\
+*// src/modules/auth/jwt/jwt.strategy.ts*\
 import { Injectable**,** UnauthorizedException } from '@nestjs/common'**;**\
 import { PassportStrategy } from '@nestjs/passport'**;**\
 import { ConfigService } from '@nestjs/config'**;**\

@@ -22,7 +22,7 @@ spec:
         - name: migrate
           image: REPLACE_ME_IMAGE
           imagePullPolicy: IfNotPresent
-          command: ["/nodejs/bin/node", "dist/infrastructure/database/migrate.js"]
+          command: ["/nodejs/bin/node", "dist/infrastructure/database/scripts/migrate.js"]
           envFrom:
             - configMapRef:
                 name: boilerplate-nestjs-config
