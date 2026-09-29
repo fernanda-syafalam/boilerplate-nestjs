@@ -9,10 +9,11 @@ import { VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { Logger } from 'nestjs-pino';
+import { Logger, PinoLogger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import type { AppConfigService } from './config';
 import { parseEnv } from './config/env.schema';
+import { registerGracefulShutdown } from './observability/graceful-shutdown';
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 
@@ -40,7 +41,7 @@ async function bootstrap(): Promise<void> {
 
   app.enableVersioning({ type: VersioningType.URI });
 
-  app.enableShutdownHooks();
+  registerGracefulShutdown(app, await app.resolve(PinoLogger));
 
   const config = app.get<AppConfigService>(ConfigService);
   const port = config.get('app.port', { infer: true });

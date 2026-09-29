@@ -1,20 +1,18 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  type OnModuleDestroy,
-  type OnModuleInit,
-} from '@nestjs/common';
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
+import { PinoLogger } from 'nestjs-pino';
 import type { AppConfigService } from '../../config';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(RedisService.name);
   public readonly client: Redis;
 
-  constructor(@Inject(ConfigService) config: AppConfigService) {
+  constructor(
+    @Inject(ConfigService) config: AppConfigService,
+    private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(RedisService.name);
     this.client = new Redis(config.get('app.redis.url', { infer: true }), {
       lazyConnect: true,
       maxRetriesPerRequest: 3,
@@ -24,7 +22,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit(): Promise<void> {
     await this.client.connect();
     await this.client.ping();
-    this.logger.log('redis client connected');
+    this.logger.info('redis client connected');
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -32,7 +30,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       // quit can race in-flight commands; force-close.
       this.client.disconnect();
     });
-    this.logger.log('redis client closed');
+    this.logger.info('redis client closed');
   }
 
   async ping(): Promise<boolean> {

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, type OnModuleInit } from '@nestjs/common';
 import * as argon2 from 'argon2';
 
 /** OWASP argon2id params; retune so one hash takes 250-500 ms. */
@@ -10,8 +10,13 @@ export const ARGON2_OPTIONS: argon2.Options = {
 };
 
 @Injectable()
-export class PasswordHasher {
-  private dummyHash: Promise<string> | undefined;
+export class PasswordHasher implements OnModuleInit {
+  private dummyHash: string | undefined;
+
+  /** Eager, so the first unknown-email login isn't slower than later ones. */
+  async onModuleInit(): Promise<void> {
+    this.dummyHash = await this.hash('dummy-password-for-timing');
+  }
 
   hash(plain: string): Promise<string> {
     return argon2.hash(plain, ARGON2_OPTIONS);
@@ -24,7 +29,7 @@ export class PasswordHasher {
 
   /** Burns a real verify so a missing user costs the same as a wrong password. */
   async verifyDummy(plain: string): Promise<void> {
-    this.dummyHash ??= this.hash('dummy-password-for-timing');
-    await this.verify(await this.dummyHash, plain);
+    this.dummyHash ??= await this.hash('dummy-password-for-timing');
+    await this.verify(this.dummyHash, plain);
   }
 }

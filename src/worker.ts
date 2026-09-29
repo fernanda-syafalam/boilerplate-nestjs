@@ -2,7 +2,8 @@
 import './observability/tracing';
 
 import { NestFactory } from '@nestjs/core';
-import { Logger } from 'nestjs-pino';
+import { Logger, PinoLogger } from 'nestjs-pino';
+import { registerGracefulShutdown } from './observability/graceful-shutdown';
 import { WorkerModule } from './worker.module';
 
 async function bootstrap(): Promise<void> {
@@ -10,7 +11,7 @@ async function bootstrap(): Promise<void> {
     bufferLogs: true,
   });
   app.useLogger(app.get(Logger));
-  app.enableShutdownHooks();
+  registerGracefulShutdown(app, await app.resolve(PinoLogger));
   app.get(Logger).log('worker started');
 }
 

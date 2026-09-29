@@ -1,9 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { AuthUser } from '../../common/types/auth-user';
-import type { AppConfig } from '../../config/configuration';
+import type { AppConfigService } from '../../config';
 import { UsersService } from '../users/users.service';
 import type { JwtPayload } from './jwt-payload';
 import { toAuthUser } from './to-auth-user';
@@ -12,7 +12,7 @@ import { toAuthUser } from './to-auth-user';
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    config: ConfigService<{ app: AppConfig }, true>,
+    @Inject(ConfigService) config: AppConfigService,
     private readonly users: UsersService,
   ) {
     super({
@@ -20,6 +20,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       secretOrKey: config.get('app.jwt.secret', { infer: true }),
       ignoreExpiration: false,
       algorithms: ['HS256'],
+      issuer: config.get('app.jwt.issuer', { infer: true }),
+      audience: config.get('app.jwt.audience', { infer: true }),
     });
   }
 

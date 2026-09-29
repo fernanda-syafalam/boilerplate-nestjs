@@ -7,9 +7,9 @@ const base = {
 };
 
 describe('envSchema', () => {
-  it('defaults TRUST_PROXY_HOPS to 1 and accepts 0', () => {
-    expect(envSchema.parse(base).TRUST_PROXY_HOPS).toBe(1);
-    expect(envSchema.parse({ ...base, TRUST_PROXY_HOPS: '0' }).TRUST_PROXY_HOPS).toBe(0);
+  it('defaults TRUST_PROXY_HOPS to 0 and accepts 1', () => {
+    expect(envSchema.parse(base).TRUST_PROXY_HOPS).toBe(0);
+    expect(envSchema.parse({ ...base, TRUST_PROXY_HOPS: '1' }).TRUST_PROXY_HOPS).toBe(1);
   });
 
   it('rejects a negative or fractional TRUST_PROXY_HOPS', () => {

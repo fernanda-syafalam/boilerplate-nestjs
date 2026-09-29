@@ -1,4 +1,5 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { PinoLogger } from 'nestjs-pino';
 import type { AuthUser } from '../../common/types/auth-user';
 import type { User } from '../../infrastructure/database/schema/users.schema';
 import { PasswordHasher } from '../../infrastructure/security/password-hasher';
@@ -9,12 +10,13 @@ import { UsersRepository } from './users.repository';
 
 @Injectable()
 export class UsersService {
-  private readonly logger = new Logger(UsersService.name);
-
   constructor(
     private readonly repo: UsersRepository,
     private readonly hasher: PasswordHasher,
-  ) {}
+    private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(UsersService.name);
+  }
 
   /** Public signup: role is never client-controlled. */
   async create(input: CreateUserInput): Promise<User> {
@@ -26,7 +28,7 @@ export class UsersService {
       role: 'customer',
     });
     if (!user) throw new ConflictException('email already in use');
-    this.logger.log({ userId: user.id, role: user.role }, 'user created');
+    this.logger.info({ userId: user.id, role: user.role }, 'user created');
     return user;
   }
 

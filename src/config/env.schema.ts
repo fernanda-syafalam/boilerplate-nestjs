@@ -32,7 +32,7 @@ const envObject = z.object({
     .refine((v) => !v.includes('*'), 'CORS_ORIGINS must not contain wildcards'),
 
   // Proxy hops to trust for X-Forwarded-For; 0 trusts none.
-  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
 
   COOKIE_SECURE: z
     .string()

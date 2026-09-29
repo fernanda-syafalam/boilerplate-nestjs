@@ -4,17 +4,9 @@ import { AppLoggerModule } from './infrastructure/logger/logger.module';
 import { QueueModule } from './infrastructure/queue/queue.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { EmailWorkerModule } from './modules/email/email-worker.module';
-import { ObservabilityModule } from './observability/observability.module';
 
 /** No HTTP guards; import DB/Auth only when a processor needs them. */
 @Module({
-  imports: [
-    AppConfigModule,
-    AppLoggerModule,
-    ObservabilityModule,
-    RedisModule,
-    QueueModule,
-    EmailWorkerModule,
-  ],
+  imports: [AppConfigModule, AppLoggerModule, RedisModule, QueueModule, EmailWorkerModule],
 })
 export class WorkerModule {}

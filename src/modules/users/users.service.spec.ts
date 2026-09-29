@@ -1,6 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
+import { PinoLogger } from 'nestjs-pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { User } from '../../infrastructure/database/schema/users.schema';
 import { PasswordHasher } from '../../infrastructure/security/password-hasher';
@@ -37,7 +38,12 @@ describe('UsersService', () => {
       softDelete: vi.fn(),
     };
     const moduleRef: TestingModule = await Test.createTestingModule({
-      providers: [UsersService, PasswordHasher, { provide: UsersRepository, useValue: repo }],
+      providers: [
+        UsersService,
+        PasswordHasher,
+        { provide: UsersRepository, useValue: repo },
+        { provide: PinoLogger, useValue: { info: vi.fn(), setContext: vi.fn() } },
+      ],
     }).compile();
     service = moduleRef.get(UsersService);
   });

@@ -9,6 +9,7 @@ import { DrizzleService } from '../src/infrastructure/database/drizzle.service';
 import type { NewUser, User } from '../src/infrastructure/database/schema/users.schema';
 import { RedisService } from '../src/infrastructure/redis/redis.service';
 import { UsersRepository } from '../src/modules/users/users.repository';
+import { inMemoryThrottler } from './support/in-memory-throttler';
 
 const ADMIN_ID = '00000000-0000-4000-8000-0000000000a1';
 const ALICE_ID = '00000000-0000-4000-8000-0000000000b1';
@@ -54,8 +55,8 @@ class FakeUsersRepository {
     return { items: [...this.rows.values()], nextCursor: null };
   }
 
-  async softDelete() {
-    return false;
+  async softDelete(id: string) {
+    return this.rows.has(id);
   }
 }
 
@@ -77,6 +78,8 @@ describe('Users (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(inMemoryThrottler.token)
+      .useValue(inMemoryThrottler.options)
       .overrideProvider(DrizzleService)
       .useValue({
         ping: async () => true,
@@ -198,6 +201,42 @@ describe('Users (e2e)', () => {
   it('GET :id with a non-uuid is 400', async () => {
     const res = await app.inject({
       method: 'GET',
+      url: '/v1/users/not-a-uuid',
+      headers: bearer(adminToken),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('DELETE :id as admin returns 204 for an existing user', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/v1/users/${BOB_ID}`,
+      headers: bearer(adminToken),
+    });
+    expect(res.statusCode).toBe(204);
+  });
+
+  it('DELETE :id as admin returns 404 for a missing user', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/v1/users/00000000-0000-4000-8000-0000000000ff',
+      headers: bearer(adminToken),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('DELETE :id as customer is 403', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/v1/users/${BOB_ID}`,
+      headers: bearer(aliceToken),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('DELETE :id with a non-uuid is 400', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
       url: '/v1/users/not-a-uuid',
       headers: bearer(adminToken),
     });

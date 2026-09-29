@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { AppConfig } from '../../config/configuration';
+import type { AppConfigService } from '../../config';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 
 interface StoredRefreshToken {
@@ -22,7 +22,7 @@ export class RefreshTokenService {
 
   constructor(
     private readonly redis: RedisService,
-    private readonly config: ConfigService<{ app: AppConfig }, true>,
+    @Inject(ConfigService) private readonly config: AppConfigService,
   ) {}
 
   async mint(userId: string): Promise<MintedRefreshToken> {

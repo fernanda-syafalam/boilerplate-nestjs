@@ -25,8 +25,17 @@ interface ProblemDetails {
 /** Members owned by the problem body itself; never copied from the exception. */
 const RESERVED_MEMBERS = new Set(['message', 'error', 'statusCode', 'status']);
 
+/** Extension members that may reach the client on 5xx (e.g. /readyz dependency checks). */
+const SERVER_ERROR_EXTENSIONS = new Set(['checks']);
+
 function extensionMembers(obj: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(obj).filter(([key]) => !RESERVED_MEMBERS.has(key)));
+}
+
+function pickAllowed(obj: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([key]) => SERVER_ERROR_EXTENSIONS.has(key)),
+  );
 }
 
 /** Maps every error to application/problem+json. */
@@ -62,9 +71,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
         if ('errors' in obj) errors = obj.errors;
         extensions = extensionMembers(obj);
       }
-      // 5xx messages may carry internals; expose only the standard phrase.
+      // 5xx bodies may carry internals; expose only the standard phrase and allowlisted members.
       if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
         title = STATUS_CODES[status] ?? 'Internal Server Error';
+        detail = undefined;
+        errors = undefined;
+        extensions = pickAllowed(extensions);
       }
     }
 

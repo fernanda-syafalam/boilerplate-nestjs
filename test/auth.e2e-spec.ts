@@ -10,6 +10,7 @@ import { DrizzleService } from '../src/infrastructure/database/drizzle.service';
 import type { User } from '../src/infrastructure/database/schema/users.schema';
 import { RedisService } from '../src/infrastructure/redis/redis.service';
 import { UsersRepository } from '../src/modules/users/users.repository';
+import { inMemoryThrottler } from './support/in-memory-throttler';
 
 /** UsersRepository is faked in memory: full pipeline, no Postgres. */
 describe('Auth (e2e)', () => {
@@ -42,6 +43,8 @@ describe('Auth (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(inMemoryThrottler.token)
+      .useValue(inMemoryThrottler.options)
       .overrideProvider(DrizzleService)
       .useValue({
         ping: async () => true,
@@ -146,6 +149,21 @@ describe('Auth (e2e)', () => {
       fullName: storedUser.fullName,
       role: storedUser.role,
     });
+  });
+
+  it('GET /v1/auth/me returns 401 for a token signed with the right secret but wrong audience', async () => {
+    const jwt = app.get(JwtService);
+    const token = await jwt.signAsync(
+      { sub: storedUser.id, role: storedUser.role },
+      { audience: 'someone-else' },
+    );
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(401);
   });
 
   it('refresh flow: rotates the refresh token and rejects the old one', async () => {

@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { PinoLogger } from 'nestjs-pino';
 
 export interface SendEmailRequest {
   to: string;
@@ -17,11 +18,14 @@ export abstract class EmailGateway {
 
 @Injectable()
 export class LoggingEmailGateway extends EmailGateway {
-  private readonly logger = new Logger(LoggingEmailGateway.name);
+  constructor(private readonly logger: PinoLogger) {
+    super();
+    this.logger.setContext(LoggingEmailGateway.name);
+  }
 
   async send(req: SendEmailRequest): Promise<SendEmailResult> {
     const messageId = `local-${Date.now()}`;
-    this.logger.log(
+    this.logger.info(
       { to: req.to, templateId: req.templateId, messageId },
       'email gateway: pretending to send',
     );

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DrizzleService } from '../src/infrastructure/database/drizzle.service';
 import { RedisService } from '../src/infrastructure/redis/redis.service';
+import { inMemoryThrottler } from './support/in-memory-throttler';
 
 describe('Health (e2e)', () => {
   let app: NestFastifyApplication;
@@ -12,6 +13,8 @@ describe('Health (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(inMemoryThrottler.token)
+      .useValue(inMemoryThrottler.options)
       .overrideProvider(DrizzleService)
       .useValue({
         ping: async () => true,

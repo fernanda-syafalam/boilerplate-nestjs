@@ -8,9 +8,8 @@ import {
   Param,
   Post,
   Query,
-  UseInterceptors,
 } from '@nestjs/common';
-import { ZodSerializerDto, ZodSerializerInterceptor } from 'nestjs-zod';
+import { ZodSerializerDto } from 'nestjs-zod';
 import { Audit } from '../../common/decorators/audit.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -22,8 +21,6 @@ import { UserIdParamDto } from './dto/user-id-param.dto';
 import { UserPageResponseDto, UserResponseDto } from './dto/user-response.dto';
 import { UsersService } from './users.service';
 
-// Not registered globally in AppModule, so @ZodSerializerDto would be a no-op without this.
-@UseInterceptors(ZodSerializerInterceptor)
 @Controller({ path: 'users', version: '1' })
 export class UsersController {
   constructor(private readonly users: UsersService) {}

@@ -153,4 +153,31 @@ describe('AllExceptionsFilter', () => {
     expect(body.status).toBe(503);
     expect(body.title).toBe('Service Unavailable');
   });
+
+  it('strips detail, errors and unlisted extensions from a 5xx body', () => {
+    const { host, send } = fakeHost();
+
+    filter.catch(
+      new HttpException(
+        { message: 'x', detail: 'pg down at 10.0.0.5', errors: { a: 1 }, secret: 's3' },
+        HttpStatus.BAD_GATEWAY,
+      ),
+      host,
+    );
+
+    const body = send.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(body.detail).toBeUndefined();
+    expect(body.errors).toBeUndefined();
+    expect(body.secret).toBeUndefined();
+    expect(body.title).toBe('Bad Gateway');
+  });
+
+  it('keeps extension members on a 4xx body', () => {
+    const { host, send } = fakeHost();
+
+    filter.catch(new HttpException({ message: 'x', hint: 'try again' }, HttpStatus.CONFLICT), host);
+
+    const body = send.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(body.hint).toBe('try again');
+  });
 });

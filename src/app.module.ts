@@ -3,7 +3,7 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { ZodValidationPipe } from 'nestjs-zod';
+import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -19,33 +19,25 @@ import { AuthModule } from './modules/auth/auth.module';
 import { EmailModule } from './modules/email/email.module';
 import { HealthModule } from './modules/health/health.module';
 import { UsersModule } from './modules/users/users.module';
-import { ObservabilityModule } from './observability/observability.module';
 
 @Module({
   imports: [
     AppConfigModule,
     AppLoggerModule,
-    ObservabilityModule,
     DrizzleModule,
     RedisModule,
-    // Redis storage so the limit is shared across replicas; tests use in-memory.
+    // Redis storage so the limit is shared across replicas; e2e tests override the options token.
     ThrottlerModule.forRootAsync({
       inject: [ConfigService, RedisService],
-      useFactory: (config: AppConfigService, redis: RedisService) => {
-        const throttlers = [
+      useFactory: (config: AppConfigService, redis: RedisService) => ({
+        throttlers: [
           {
             ttl: config.get('app.throttler.ttlMs', { infer: true }),
             limit: config.get('app.throttler.limit', { infer: true }),
           },
-        ];
-        if (config.get('app.nodeEnv', { infer: true }) === 'test') {
-          return { throttlers };
-        }
-        return {
-          throttlers,
-          storage: new ThrottlerStorageRedisService(redis.client),
-        };
-      },
+        ],
+        storage: new ThrottlerStorageRedisService(redis.client),
+      }),
     }),
     QueueModule,
     AuthModule,
@@ -63,6 +55,8 @@ import { ObservabilityModule } from './observability/observability.module';
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     { provide: APP_PIPE, useClass: ZodValidationPipe },
+    // Applies @ZodSerializerDto; handlers without it pass through untouched.
+    { provide: APP_INTERCEPTOR, useClass: ZodSerializerInterceptor },
   ],
 })
 export class AppModule {}

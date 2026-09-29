@@ -1,6 +1,6 @@
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
+import { PinoLogger } from 'nestjs-pino';
 import { EMAIL_QUEUE } from './email.constants';
 import { EmailGateway } from './email.gateway';
 import type { SendEmailJob } from './email.service';
@@ -8,10 +8,12 @@ import type { SendEmailJob } from './email.service';
 // IO-bound; tune concurrency to the gateway rate limit.
 @Processor(EMAIL_QUEUE, { concurrency: 10 })
 export class EmailProcessor extends WorkerHost {
-  private readonly logger = new Logger(EmailProcessor.name);
-
-  constructor(private readonly gateway: EmailGateway) {
+  constructor(
+    private readonly gateway: EmailGateway,
+    private readonly logger: PinoLogger,
+  ) {
     super();
+    this.logger.setContext(EmailProcessor.name);
   }
 
   async process(job: Job<SendEmailJob>): Promise<{ messageId: string }> {
@@ -20,7 +22,7 @@ export class EmailProcessor extends WorkerHost {
       templateId: job.data.templateId,
       variables: job.data.variables,
     });
-    this.logger.log(
+    this.logger.info(
       { jobId: job.id, idempotencyKey: job.data.idempotencyKey, messageId: result.messageId },
       'email sent',
     );

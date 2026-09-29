@@ -1,4 +1,5 @@
 import type { Job } from 'bullmq';
+import type { PinoLogger } from 'nestjs-pino';
 import { describe, expect, it, vi } from 'vitest';
 import { EmailGateway } from './email.gateway';
 import { EmailProcessor } from './email.processor';
@@ -8,11 +9,13 @@ function fakeJob(data: SendEmailJob): Job<SendEmailJob> {
   return { id: 'j-1', data, attemptsMade: 0 } as unknown as Job<SendEmailJob>;
 }
 
+const logger = { info: vi.fn(), error: vi.fn(), setContext: vi.fn() };
+
 describe('EmailProcessor', () => {
   it('delegates to the gateway and returns its messageId', async () => {
     const send = vi.fn().mockResolvedValue({ messageId: 'm-1' });
     const gateway: Pick<EmailGateway, 'send'> = { send };
-    const processor = new EmailProcessor(gateway as EmailGateway);
+    const processor = new EmailProcessor(gateway as EmailGateway, logger as unknown as PinoLogger);
 
     const result = await processor.process(
       fakeJob({
@@ -34,7 +37,7 @@ describe('EmailProcessor', () => {
   it('propagates gateway errors so BullMQ can retry', async () => {
     const send = vi.fn().mockRejectedValue(new Error('SMTP down'));
     const gateway: Pick<EmailGateway, 'send'> = { send };
-    const processor = new EmailProcessor(gateway as EmailGateway);
+    const processor = new EmailProcessor(gateway as EmailGateway, logger as unknown as PinoLogger);
 
     await expect(
       processor.process(
