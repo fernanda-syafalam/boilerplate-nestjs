@@ -15,7 +15,6 @@ import { Public } from '../../common/decorators/public.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 
-/** @fastify/cookie augments FastifyRequest with a `cookies` record after plugin registration. */
 type CookieRequest = FastifyRequest & { cookies: Record<string, string | undefined> };
 
 const REFRESH_COOKIE = 'refresh_token';
@@ -37,13 +36,7 @@ export class AuthController {
     return { accessToken: result.accessToken, user: result.user };
   }
 
-  /**
-   * Exchange a still-valid refresh token for a fresh access + refresh
-   * pair. The previous refresh token is rotated (single-use) — a stolen
-   * token has at most one replay window before the next legitimate
-   * refresh invalidates it. Token is read from the httpOnly cookie, not
-   * the request body (ADR-0002 / browser SPA cookie model).
-   */
+  /** Token is read from the httpOnly cookie, never the body. */
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
@@ -60,11 +53,7 @@ export class AuthController {
     return { accessToken: result.accessToken, user: result.user };
   }
 
-  /**
-   * Best-effort logout — drops the refresh token from Redis and clears
-   * the httpOnly cookie. The access token (JWT) remains valid until its
-   * own TTL; the SPA should also drop it from memory.
-   */
+  /** The access JWT stays valid until it expires. */
   @Public()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -76,28 +65,16 @@ export class AuthController {
     if (rawToken) {
       await this.auth.logout(rawToken);
     }
-    // Clear regardless — idempotent for the browser.
     reply.clearCookie(REFRESH_COOKIE, { path: COOKIE_PATH });
   }
 
-  /**
-   * Lightweight identity probe — confirms the bearer token resolves to
-   * a known user. Useful as a smoke test for clients and as a working
-   * example of the `@CurrentUser` decorator.
-   */
   @Get('me')
   me(@CurrentUser() user: AuthUser): AuthUser {
     return user;
   }
 
-  // ---------------------------------------------------------------------------
-  // Private helpers
-  // ---------------------------------------------------------------------------
-
   private setRefreshCookie(reply: FastifyReply, token: string, maxAge: number): void {
-    // secure / sameSite / domain come from the plugin defaults registered
-    // in main.ts (fastifyCookie({ defaults: { ... } })). Per-call opts
-    // are merged on top of those defaults by Fastify.
+    // secure/sameSite/domain come from the plugin defaults in main.ts.
     reply.setCookie(REFRESH_COOKIE, token, {
       httpOnly: true,
       path: COOKIE_PATH,

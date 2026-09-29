@@ -5,12 +5,7 @@ import type { CreateUserInput } from './dto/create-user.dto';
 import type { CursorPage } from './users.repository';
 import { UsersRepository } from './users.repository';
 
-/**
- * argon2id parameters chosen per OWASP Password Storage Cheat Sheet
- * (memoryCost ≥ 19 MiB, timeCost 2, parallelism 1) — see Pilar 4.
- * Re-tune when migrating to faster / slower hardware so a single hash
- * lands in the 250–500 ms range under load.
- */
+/** OWASP argon2id params; retune so one hash takes 250-500 ms. */
 const ARGON2_OPTIONS: argon2.Options = {
   type: argon2.argon2id,
   memoryCost: 19_456,
@@ -27,8 +22,6 @@ export class UsersService {
   async create(input: CreateUserInput): Promise<User> {
     const existing = await this.repo.findByEmail(input.email);
     if (existing) {
-      // 409 instead of 400 — the request is well-formed, the conflict
-      // is with stored state. See Pilar 2.
       throw new ConflictException('email already in use');
     }
 

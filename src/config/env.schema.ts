@@ -1,20 +1,5 @@
 import { z } from 'zod';
 
-/**
- * Environment variable schema. Single source of truth — every env var
- * the app reads must be declared here. Validation runs at startup so
- * the process fails fast on a misconfiguration instead of crashing on
- * the first request.
- *
- * Add new variables here as features land:
- *   DATABASE_URL  -> when Drizzle / pg is wired up
- *   REDIS_URL     -> when Redis / BullMQ is wired up
- *   JWT_SECRET    -> when auth is wired up
- *   LOG_LEVEL     -> when nestjs-pino is wired up
- *
- * See v2 Best Practices doc, Pilar 1 ("Konfigurasi dengan validasi
- * schema") for the broader pattern.
- */
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -27,12 +12,9 @@ export const envSchema = z.object({
   THROTTLER_TTL_MS: z.coerce.number().int().positive().default(60_000),
   THROTTLER_LIMIT: z.coerce.number().int().positive().default(100),
 
-  // 32+ char keeps brute-force out of reach. The schema rejects shorter
-  // values so a placeholder secret never leaks into production.
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('15m'),
-  // Refresh tokens are opaque (not JWTs) and stored hashed in Redis;
-  // the value here controls Redis TTL.
+  // Opaque token, not a JWT; this value is the Redis TTL.
   REFRESH_TOKEN_TTL_SECONDS: z.coerce
     .number()
     .int()
@@ -41,11 +23,8 @@ export const envSchema = z.object({
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 
-  // CORS — comma-separated list of allowed origins for the browser SPA.
-  // No wildcard is allowed when credentials:true (ADR-0002 / cookie model).
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
 
-  // Cookie settings for the httpOnly refresh_token cookie.
   COOKIE_SECURE: z
     .string()
     .transform((v) => v === 'true' || v === '1')
@@ -54,9 +33,7 @@ export const envSchema = z.object({
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
 
-  // OpenTelemetry. Endpoint absent -> SDK is a no-op (instrumentation
-  // still loads but spans / metrics are dropped) so engineers can run
-  // pnpm dev without a local collector.
+  // Read directly by observability/tracing.ts before ConfigModule exists; unset endpoint = no export.
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   OTEL_SERVICE_NAME: z.string().min(1).default('boilerplate-nestjs'),
   SERVICE_VERSION: z.string().default('0.0.0'),

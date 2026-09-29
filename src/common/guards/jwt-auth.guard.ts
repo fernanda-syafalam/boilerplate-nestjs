@@ -3,14 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
-/**
- * Default-deny guard. Wired globally in AppModule via APP_GUARD; opt
- * out per handler or per controller with `@Public()`.
- *
- * The reflector check runs before super.canActivate so a public route
- * never triggers the JWT validation pipeline at all — keeps the unauth
- * path cheap.
- */
+/** @Public() skips JWT validation entirely. */
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
   constructor(private readonly reflector: Reflector) {

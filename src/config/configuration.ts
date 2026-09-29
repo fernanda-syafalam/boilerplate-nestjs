@@ -1,12 +1,6 @@
 import { registerAs } from '@nestjs/config';
 import { envSchema } from './env.schema';
 
-/**
- * Typed config object loaded into ConfigModule. Parses (does not just
- * cast) `process.env` here so coerced values (number, enum) reach the
- * config — see ADR-0002 / v2 Best Practices doc, Pilar 1 for the
- * "parse, don't cast" rationale.
- */
 export const appConfig = registerAs('app', () => {
   const env = envSchema.parse(process.env);
   return {
@@ -30,7 +24,6 @@ export const appConfig = registerAs('app', () => {
     },
     logLevel: env.LOG_LEVEL,
     cors: {
-      // Split here so downstream code gets a ready-to-use string array.
       origins: env.CORS_ORIGINS.split(',').map((o) => o.trim()),
     },
     cookie: {

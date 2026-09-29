@@ -10,15 +10,9 @@ interface JwtPayload {
   role: AuthUser['role'];
 }
 
-/**
- * Internal result carrying both the access token and the raw refresh
- * token + TTL so the controller can set the httpOnly cookie. Neither
- * `refreshToken` nor `refreshExpiresInSeconds` is ever sent in the
- * JSON body — the controller extracts them before building the response.
- */
+/** refreshToken goes to the httpOnly cookie, never the JSON body. */
 export interface LoginResult {
   accessToken: string;
-  /** Raw opaque refresh token — MUST be placed in httpOnly cookie, not JSON body. */
   refreshToken: string;
   refreshExpiresInSeconds: number;
   user: AuthUser;
@@ -34,9 +28,7 @@ export class AuthService {
 
   async login(email: string, password: string): Promise<LoginResult> {
     const user = await this.usersRepo.findByEmail(email);
-    // Same response shape for "user not found" and "password mismatch"
-    // so an attacker cannot enumerate registered emails through timing
-    // or message differences.
+    // Verify against a dummy hash when the user is missing so both paths look alike.
     const fakeHash = '$argon2id$v=19$m=19456,t=2,p=1$placeholder$invalid';
     const passwordOk = await argon2
       .verify(user?.passwordHash ?? fakeHash, password)
@@ -55,16 +47,10 @@ export class AuthService {
     };
   }
 
-  /**
-   * Trade a refresh token for a fresh pair. The old refresh token is
-   * single-use (rotated) so a leaked token has at most one replay
-   * window before the next legitimate refresh invalidates it.
-   */
   async refresh(rawRefreshToken: string): Promise<LoginResult> {
     const { userId, refresh } = await this.refreshTokens.rotate(rawRefreshToken);
     const user = await this.usersRepo.findById(userId);
     if (!user) {
-      // User got deleted between issuance and refresh; treat as logged out.
       throw new UnauthorizedException('invalid refresh token');
     }
     const accessToken = await this.signAccess(user.id, user.role);

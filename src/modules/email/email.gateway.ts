@@ -10,12 +10,7 @@ export interface SendEmailResult {
   messageId: string;
 }
 
-/**
- * Outbound email port. The boilerplate ships with a logging stub —
- * production deployments swap this provider for a real SES / SendGrid /
- * Mailgun / Resend adapter. Keep the interface narrow so swapping does
- * not ripple into every caller.
- */
+/** Port; swap LoggingEmailGateway for a real provider adapter. */
 export abstract class EmailGateway {
   abstract send(req: SendEmailRequest): Promise<SendEmailResult>;
 }

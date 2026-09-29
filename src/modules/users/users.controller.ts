@@ -27,9 +27,6 @@ const CursorQuerySchema = z.object({
 export class UsersController {
   constructor(private readonly users: UsersService) {}
 
-  // Self-registration is the simplest reference flow — leave it public
-  // for now. In a real service this might be admin-only, behind an
-  // invite token, or hidden behind a separate signup module.
   @Public()
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -46,11 +43,6 @@ export class UsersController {
 
   @Get()
   async list(@Query() query: unknown) {
-    // Coerced via zod — global ZodValidationPipe doesn't validate
-    // plain query objects, so we parse here. The first business
-    // module that wants this pattern should likely move the cursor
-    // schema into a shared `common/pagination/` once a second module
-    // needs it (rule of three).
     const { cursor, limit } = CursorQuerySchema.parse(query);
     const page = await this.users.list(cursor, limit);
     return {
@@ -61,10 +53,6 @@ export class UsersController {
     };
   }
 
-  // Soft-delete is admin-only and audited. Demonstrates the Pilar 4
-  // RBAC + audit pattern: @Roles for coarse role gating, @Audit so
-  // the operation lands in the audit log stream alongside actor +
-  // target + outcome.
   @Roles('admin')
   @Audit('user.soft_delete')
   @Delete(':id')

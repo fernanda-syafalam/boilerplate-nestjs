@@ -61,7 +61,6 @@ describe('AllExceptionsFilter', () => {
       instance: '/v1/users/abc',
       requestId: 'req-1',
     });
-    // title comes from the message.
     expect(body.title).toBe('user not found');
   });
 

@@ -30,7 +30,6 @@ describe('EmailService', () => {
       templateId: 'order-confirm',
       idempotencyKey: 'order-confirm:order-1',
     });
-    // jobId == idempotencyKey so BullMQ rejects duplicates at insert.
     expect(options).toEqual({ jobId: 'order-confirm:order-1' });
   });
 });

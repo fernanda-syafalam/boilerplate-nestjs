@@ -11,12 +11,7 @@ import type { User } from '../src/infrastructure/database/schema/users.schema';
 import { RedisService } from '../src/infrastructure/redis/redis.service';
 import { UsersRepository } from '../src/modules/users/users.repository';
 
-/**
- * E2E coverage for the auth flow without a real Postgres. The
- * UsersRepository is overridden with an in-memory fake so the test
- * exercises the full pipeline (controller → guard → strategy → service)
- * but stays fast and offline.
- */
+/** UsersRepository is faked in memory: full pipeline, no Postgres. */
 describe('Auth (e2e)', () => {
   let app: NestFastifyApplication;
   let storedUser: User;
@@ -55,11 +50,7 @@ describe('Auth (e2e)', () => {
       })
       .overrideProvider(RedisService)
       .useValue({
-        // Minimal in-memory ioredis stand-in covering the calls
-        // RefreshTokenService + the throttler stub make. Refresh token
-        // rotation is a state machine across two POSTs, so a no-op
-        // stub would let rotated tokens "still work" — use a real Map
-        // so the test catches actual rotation semantics.
+        // Real Map, not a no-op: rotation is stateful across two POSTs.
         client: (() => {
           const store = new Map<string, string>();
           return {
@@ -87,9 +78,7 @@ describe('Auth (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
-    // Register @fastify/cookie just like main.ts so the controller can read
-    // req.cookies and call reply.setCookie / clearCookie. Without it the
-    // cookie-based refresh flow 500s. Cast: see the note in main.ts.
+    // The cookie plugin is required or the refresh flow 500s; cast: see main.ts.
     await app.register(fastifyCookie as unknown as Parameters<typeof app.register>[0]);
     app.enableVersioning({ type: VersioningType.URI });
     await app.init();
@@ -100,7 +89,6 @@ describe('Auth (e2e)', () => {
     await app.close();
   });
 
-  /** Pull a Set-Cookie value out of a light-my-request response. */
   function getCookie(
     res: { cookies: Array<{ name: string; value: string }> },
     name: string,
@@ -170,8 +158,6 @@ describe('Auth (e2e)', () => {
       },
       headers: { 'content-type': 'application/json' },
     });
-    // The access token comes back in the body; the refresh token is set as an
-    // httpOnly cookie, never in the JSON body.
     const loginBody = login.json() as {
       accessToken: string;
       refreshToken?: string;
@@ -181,7 +167,6 @@ describe('Auth (e2e)', () => {
     const c0 = getCookie(login, 'refresh_token');
     expect(typeof c0).toBe('string');
 
-    // First rotation succeeds and issues a different refresh cookie.
     const r1 = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',
@@ -193,7 +178,6 @@ describe('Auth (e2e)', () => {
     expect(c1).not.toBe(c0);
     expect(typeof (r1.json() as { accessToken: string }).accessToken).toBe('string');
 
-    // Replaying the original cookie after rotation must be rejected.
     const replay = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',
@@ -222,7 +206,6 @@ describe('Auth (e2e)', () => {
     });
     expect(logout.statusCode).toBe(204);
 
-    // The same cookie can no longer be exchanged after logout revoked it.
     const refresh = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',

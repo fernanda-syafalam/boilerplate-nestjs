@@ -7,15 +7,7 @@ import { QueueModule } from './infrastructure/queue/queue.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { EmailModule } from './modules/email/email.module';
 
-/**
- * Composition root for the worker process. Mirrors AppModule but
- * deliberately omits the HTTP-side wiring (Fastify adapter, controller
- * pipeline, throttler, JwtAuthGuard, RolesGuard, AuditInterceptor):
- * workers do not serve HTTP. DrizzleModule and AuthModule are absent
- * because the email queue does not touch the database or JWTs — domain
- * processors that DO need them should add the imports they actually
- * use.
- */
+/** No HTTP guards; import DB/Auth only when a processor needs them. */
 @Module({
   imports: [
     ConfigModule.forRoot({

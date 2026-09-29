@@ -8,17 +8,10 @@ import * as schema from './schema';
 
 export type Db = NodePgDatabase<typeof schema>;
 
-/**
- * Wraps the Postgres connection pool and the Drizzle client. The rest
- * of the app talks to the database only through repositories that
- * inject this service — see Pilar 3 ("Service tidak meng-import
- * drizzle atau db langsung").
- */
 @Injectable()
 export class DrizzleService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DrizzleService.name);
   private pool!: Pool;
-  // db is assigned in onModuleInit before any consumer reads it.
   public db!: Db;
 
   constructor(private readonly config: ConfigService<{ app: AppConfig }, true>) {}
@@ -31,7 +24,6 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
       connectionTimeoutMillis: 5_000,
     });
 
-    // Verify connection at startup so a misconfiguration fails fast.
     await this.pool.query('select 1');
 
     this.db = drizzle(this.pool, { schema, logger: false });
@@ -43,10 +35,6 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
     this.logger.log('database pool closed');
   }
 
-  /**
-   * Lightweight readiness probe. Returns true when the pool can serve
-   * a query, false otherwise. Used by HealthController.readiness().
-   */
   async ping(): Promise<boolean> {
     try {
       await this.db.execute(sql`select 1`);

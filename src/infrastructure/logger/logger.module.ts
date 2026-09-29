@@ -3,18 +3,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
 import type { AppConfig } from '../../config/configuration';
 
-/**
- * Pino logger wired up per Pilar 6:
- *
- * - JSON output by default; pino-pretty only for local development so
- *   the production log shipper does not have to parse pretty text.
- * - Each log line carries the Fastify request id (from `genReqId` in
- *   main.ts) so a single request can be traced through every line it
- *   produced.
- * - Sensitive fields are redacted at the logger boundary instead of at
- *   each call site — defence in depth against accidental leaks of
- *   passwords, tokens, and authorization headers.
- */
 @Module({
   imports: [
     LoggerModule.forRootAsync({

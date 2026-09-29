@@ -17,16 +17,7 @@ interface ReadinessStatus {
   };
 }
 
-/**
- * Liveness and readiness endpoints — wired to K8s probes.
- *
- * - `/healthz` (liveness) is intentionally cheap and dependency-free.
- *   K8s kills the pod when this fails; a slow database or Redis must
- *   NOT take all replicas down at once. See v2 doc, Pilar 6.
- * - `/readyz` (readiness) verifies the app can serve traffic by
- *   pinging every external dependency. New dependencies must be added
- *   here as they land.
- */
+/** Liveness is dependency-free so a slow DB does not restart every pod; readiness pings dependencies. */
 @Public()
 @Controller()
 export class HealthController {
@@ -47,8 +38,6 @@ export class HealthController {
     const [databaseOk, redisOk] = await Promise.all([this.drizzle.ping(), this.redis.ping()]);
 
     if (!databaseOk || !redisOk) {
-      // 503 tells K8s to stop routing traffic to this pod, but does
-      // not kill it (that would be liveness's job).
       throw new ServiceUnavailableException({
         status: 'degraded',
         checks: {

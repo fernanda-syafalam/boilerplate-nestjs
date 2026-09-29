@@ -5,13 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 import { RefreshTokenService } from './refresh-token.service';
 
-/**
- * An in-memory ioredis stand-in. Implements only the operations
- * RefreshTokenService relies on (set with EX, getdel, del). Faster
- * and more deterministic than spinning a real Redis for these unit
- * tests; rotation behaviour against a real Redis stays covered by
- * future integration-level checks.
- */
+/** In-memory ioredis stand-in: set EX, getdel, del. */
 function makeFakeRedisClient() {
   const store = new Map<string, string>();
   return {
@@ -71,10 +65,8 @@ describe('RefreshTokenService', () => {
     expect(first.userId).toBe('user-1');
     expect(first.refresh.token).not.toBe(minted.token);
 
-    // The original token is single-use — replaying must fail.
     await expect(service.rotate(minted.token)).rejects.toBeInstanceOf(UnauthorizedException);
 
-    // The freshly minted token from the first rotation works.
     const second = await service.rotate(first.refresh.token);
     expect(second.userId).toBe('user-1');
   });

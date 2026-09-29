@@ -13,13 +13,7 @@ interface JwtPayload {
   exp: number;
 }
 
-/**
- * Validates an incoming JWT and rehydrates `req.user` from Postgres.
- * Doing the lookup on every request is the simplest correct default;
- * once the service grows, consider caching the AuthUser in Redis with
- * a short TTL and explicit invalidation on role change — see v2 doc,
- * Pilar 4.
- */
+/** Rehydrates req.user from the DB per request; cache if hot. */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(

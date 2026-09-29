@@ -5,14 +5,7 @@ import { EMAIL_QUEUE } from './email.constants';
 import { EmailGateway } from './email.gateway';
 import type { SendEmailJob } from './email.service';
 
-/**
- * Worker for the `email` queue. Lives in the worker process
- * (entrypoint `dist/worker.js`); HTTP requests do not run this code.
- *
- * Concurrency 10 is a safe default for an email-shaped workload — IO
- * bound, no DB writes per job. Tune downwards if the gateway's rate
- * limit is tighter, or upwards once you measure the real bottleneck.
- */
+// IO-bound; tune concurrency to the gateway rate limit.
 @Processor(EMAIL_QUEUE, { concurrency: 10 })
 export class EmailProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailProcessor.name);

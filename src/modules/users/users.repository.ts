@@ -10,14 +10,9 @@ export interface CursorPage<T> {
 
 interface CursorPayload {
   id: string;
-  createdAt: string; // ISO 8601
+  createdAt: string;
 }
 
-/**
- * The only place in the application that talks to the `users` table.
- * Service consumers receive domain types (User / NewUser) — never
- * Drizzle row tuples or raw SQL. See Pilar 3.
- */
 @Injectable()
 export class UsersRepository {
   constructor(private readonly drizzle: DrizzleService) {}
@@ -47,18 +42,12 @@ export class UsersRepository {
   async create(input: NewUser): Promise<User> {
     const [row] = await this.db.insert(users).values(input).returning();
     if (!row) {
-      // Returning() can in theory yield no row only on a hard insert
-      // failure that did not throw — defensive guard.
       throw new Error('users.insert returned no row');
     }
     return row;
   }
 
-  /**
-   * Cursor-paginated list ordered by createdAt DESC, id DESC. The
-   * composite key handles the edge case where two users share a
-   * created_at timestamp — sorting by createdAt alone is unstable.
-   */
+  /** The (createdAt, id) tie-break keeps order stable. */
   async listPage(cursor: string | undefined, limit: number): Promise<CursorPage<User>> {
     const decoded = cursor ? decodeCursor(cursor) : null;
     const cursorPredicate = decoded

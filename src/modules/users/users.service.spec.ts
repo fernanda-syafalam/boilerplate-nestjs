@@ -57,7 +57,6 @@ describe('UsersService', () => {
       expect(repo.create).toHaveBeenCalledTimes(1);
       const call = repo.create.mock.calls[0]?.[0];
       expect(call?.passwordHash).toMatch(/^\$argon2id\$/);
-      // Sanity check: the plain password must never be stored.
       expect(call?.passwordHash).not.toContain('correct horse');
     });
 
@@ -88,9 +87,7 @@ describe('UsersService', () => {
   });
 
   describe('hash compatibility', () => {
-    // Sanity check the argon2 binding is wired and the chosen
-    // parameters produce a verifiable hash. Slow (~50 ms) but only one
-    // case so cost is bounded.
+    // Verifies the argon2 binding and params produce a verifiable hash.
     it('produces a hash that argon2.verify accepts', async () => {
       repo.findByEmail.mockResolvedValue(null);
       repo.create.mockImplementation(async (input) => ({ ...sampleUser, ...input }));

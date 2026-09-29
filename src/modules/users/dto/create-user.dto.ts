@@ -1,10 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
-/**
- * Input for POST /v1/users. `.strict()` rejects unknown fields, which
- * blocks accidental mass-assignment from clients sending extra keys.
- */
+/** strict() rejects unknown keys (mass-assignment). */
 export const CreateUserSchema = z
   .object({
     email: z.email().max(255),

@@ -5,7 +5,6 @@ on:
     branches: [main]
   pull_request:
 
-# Cancel superseded runs of the same ref to save runner minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -21,9 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # pnpm version comes from package.json's `packageManager` field —
-      # do not set `version:` here, the action would then complain about
-      # a duplicate spec.
+      # pnpm version comes from package.json's `packageManager`; do not set `version:` here.
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
@@ -44,9 +41,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # pnpm version comes from package.json's `packageManager` field —
-      # do not set `version:` here, the action would then complain about
-      # a duplicate spec.
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
@@ -74,9 +68,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # pnpm version comes from package.json's `packageManager` field —
-      # do not set `version:` here, the action would then complain about
-      # a duplicate spec.
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
@@ -86,6 +77,4 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Testcontainers spawns its own Postgres via the Docker daemon
-      # that ubuntu-latest provides out of the box.
       - run: pnpm test:int

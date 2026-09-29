@@ -9,30 +9,12 @@ interface StoredRefreshToken {
 }
 
 export interface MintedRefreshToken {
-  token: string; // raw token returned to the client
+  token: string;
   expiresInSeconds: number;
 }
 
 /**
- * Opaque refresh tokens with single-use rotation. The raw token is
- * never stored — Redis holds only sha256(rawToken) as the key, so a
- * leaked Redis dump cannot be used to log in.
- *
- * Rotation pattern (each `/v1/auth/refresh` call):
- *   1. Lookup current token by its hash and atomically delete it
- *      (Redis GETDEL — atomic so a concurrent retry cannot both
- *      succeed and produce two valid descendants).
- *   2. If lookup misses, the token is unknown OR already rotated.
- *      Respond 401 either way.
- *   3. Mint a fresh refresh token, return it to the client.
- *
- * Out of scope for the boilerplate (left as follow-up for services
- * that need higher assurance):
- *   - Token "family" theft detection: when a stolen token is replayed
- *     after the legitimate user has already rotated it, the entire
- *     family is revoked. Implementation requires either reverse
- *     lookup or per-family Redis set — track issue if a service
- *     needs it.
+ * Opaque single-use tokens; Redis stores only sha256. No token-family theft detection.
  */
 @Injectable()
 export class RefreshTokenService {
@@ -43,9 +25,6 @@ export class RefreshTokenService {
     private readonly config: ConfigService<{ app: AppConfig }, true>,
   ) {}
 
-  /**
-   * Issue a brand-new refresh token bound to `userId`. Used by login.
-   */
   async mint(userId: string): Promise<MintedRefreshToken> {
     const raw = randomBytes(32).toString('base64url');
     const key = this.redisKey(raw);
@@ -55,16 +34,9 @@ export class RefreshTokenService {
     return { token: raw, expiresInSeconds };
   }
 
-  /**
-   * Trade an unused refresh token for a new one. Throws
-   * UnauthorizedException for unknown / already-rotated / expired
-   * tokens.
-   */
   async rotate(rawToken: string): Promise<{ userId: string; refresh: MintedRefreshToken }> {
     const key = this.redisKey(rawToken);
-    // GETDEL is atomic in Redis 6.2+, so a concurrent rotation race
-    // returns the value to exactly one caller; everyone else sees
-    // null and is rejected.
+    // Atomic, so concurrent rotations yield one winner.
     const stored = await this.redis.client.getdel(key);
     if (!stored) {
       throw new UnauthorizedException('invalid refresh token');
@@ -74,10 +46,6 @@ export class RefreshTokenService {
     return { userId, refresh };
   }
 
-  /**
-   * Best-effort logout — invalidate a specific refresh token. Safe to
-   * call with an unknown token; returns silently.
-   */
   async revoke(rawToken: string): Promise<void> {
     await this.redis.client.del(this.redisKey(rawToken));
   }

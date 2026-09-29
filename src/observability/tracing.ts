@@ -6,24 +6,7 @@ import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 
-/**
- * OpenTelemetry SDK bootstrap. MUST be imported as the very first
- * statement in `main.ts` (and any other entrypoint) — auto-
- * instrumentation patches modules at load time, so anything imported
- * before this file will not be instrumented.
- *
- * Env contract:
- *   OTEL_EXPORTER_OTLP_ENDPOINT   base URL of the OTLP/HTTP collector;
- *                                 omit to disable exporters (SDK runs
- *                                 as a no-op in that case so dev does
- *                                 not need a local collector)
- *   OTEL_SERVICE_NAME             service identifier in Tempo / Loki
- *   SERVICE_VERSION               commit SHA or semver from CI
- *
- * The values are read via process.env directly because this module
- * runs before NestFactory.create, before ConfigModule exists. The
- * env.schema.ts still validates them for the rest of the app.
- */
+// Must be the first import; reads process.env because it runs before ConfigModule.
 const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 const serviceName = process.env.OTEL_SERVICE_NAME ?? 'boilerplate-nestjs';
 const serviceVersion = process.env.SERVICE_VERSION ?? '0.0.0';
@@ -44,11 +27,8 @@ export const otelSdk = new NodeSDK({
     : undefined,
   instrumentations: [
     getNodeAutoInstrumentations({
-      // The fs instrumentation generates a span for every file system
-      // call — extremely noisy and rarely useful. Disable by default.
+      // Noisy.
       '@opentelemetry/instrumentation-fs': { enabled: false },
-      // Pino integration injects trace_id / span_id into every log
-      // line so Loki and Tempo can be cross-linked.
       '@opentelemetry/instrumentation-pino': { enabled: true },
     }),
   ],
@@ -56,13 +36,11 @@ export const otelSdk = new NodeSDK({
 
 otelSdk.start();
 
-// Flush exporters before the process exits so spans buffered in memory
-// reach the collector.
 process.on('SIGTERM', () => {
   otelSdk
     .shutdown()
     .catch(() => {
-      /* swallow — we are exiting anyway */
+      /* exiting anyway */
     })
     .finally(() => process.exit(0));
 });

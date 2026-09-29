@@ -7,15 +7,7 @@ import * as schema from '../../infrastructure/database/schema';
 import { users } from '../../infrastructure/database/schema/users.schema';
 import { UsersRepository } from './users.repository';
 
-/**
- * Real Postgres integration test for UsersRepository — verifies query
- * shape, constraints (unique email), soft-delete predicate, and cursor
- * pagination ordering.
- *
- * Requires Docker locally. Container start adds ~3–5 s to the suite.
- * Schema is applied via drizzle.execute on startup so this test does
- * not depend on having already run `pnpm db:generate`.
- */
+/** Needs Docker (Testcontainers). */
 describe('UsersRepository (integration)', () => {
   let container: StartedPostgreSqlContainer;
   let pool: Pool;
@@ -27,8 +19,7 @@ describe('UsersRepository (integration)', () => {
     pool = new Pool({ connectionString: container.getConnectionUri() });
     db = drizzle(pool, { schema });
 
-    // Apply schema by hand here — this test bypasses drizzle-kit so it
-    // can run against any commit without first regenerating SQL.
+    // Bypasses drizzle-kit, so the schema is applied by hand.
     await db.execute(`
       CREATE TYPE user_role AS ENUM ('admin', 'staff', 'customer');
       CREATE TABLE users (
@@ -101,7 +92,6 @@ describe('UsersRepository (integration)', () => {
     const page2 = await repo.listPage(page1.nextCursor ?? undefined, 2);
     expect(page2.items).toHaveLength(2);
 
-    // No overlap between pages.
     const page1Ids = new Set(page1.items.map((u) => u.id));
     expect(page2.items.every((u) => !page1Ids.has(u.id))).toBe(true);
 
