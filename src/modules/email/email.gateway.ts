@@ -12,6 +12,11 @@ export const SendEmailRequestSchema = z.object({
 
 export type SendEmailRequest = z.infer<typeof SendEmailRequestSchema>;
 
+/** Paths and codes only: issue messages/values may echo the recipient address. */
+export function describeIssues(error: z.ZodError): string {
+  return error.issues.map((i) => `${i.path.join('.') || '(root)'}:${i.code}`).join(', ');
+}
+
 export interface SendEmailResult {
   messageId: string;
 }

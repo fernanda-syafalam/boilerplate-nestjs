@@ -41,7 +41,9 @@ describe('EmailService', () => {
   });
 
   it('rejects an invalid recipient before touching the queue', async () => {
-    await expect(service.sendOrderConfirmation('order-1', 'not-an-email', {})).rejects.toThrow();
+    await expect(service.sendOrderConfirmation('order-1', 'not-an-email', {})).rejects.toThrow(
+      'invalid email request: to:invalid_format',
+    );
     expect(queueAdd).not.toHaveBeenCalled();
   });
 });
