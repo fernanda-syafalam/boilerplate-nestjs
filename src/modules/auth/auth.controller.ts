@@ -15,20 +15,16 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import type { AuthUser } from '../../common/types/auth-user';
 import { AuthService } from './auth.service';
-import {
-  type AuthResponse,
-  AuthResponseDto,
-  type AuthUserBody,
-  AuthUserDto,
-} from './dto/auth-response.dto';
+import { type AuthResponse, AuthResponseDto, AuthUserDto } from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
 
-type CookieRequest = FastifyRequest & { cookies: Record<string, string | undefined> };
-
 const REFRESH_COOKIE = 'refresh_token';
-const COOKIE_PATH = '/v1/auth';
+const AUTH_ROUTE = 'auth';
+const API_VERSION = '1';
+// Nest's URI versioning prefixes 'v' (main.ts), so the cookie path must follow the route.
+const COOKIE_PATH = `/v${API_VERSION}/${AUTH_ROUTE}`;
 
-@Controller({ path: 'auth', version: '1' })
+@Controller({ path: AUTH_ROUTE, version: API_VERSION })
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
@@ -41,8 +37,7 @@ export class AuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<AuthResponse> {
     const result = await this.auth.login(body.email, body.password);
-    this.setRefreshCookie(reply, result.refreshToken, result.refreshExpiresInSeconds);
-    return { accessToken: result.accessToken, user: result.user };
+    return this.respond(reply, result);
   }
 
   /** Token is read from the httpOnly cookie, never the body. */
@@ -51,7 +46,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ZodSerializerDto(AuthResponseDto)
   async refresh(
-    @Req() req: CookieRequest,
+    @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<AuthResponse> {
     const rawToken = req.cookies[REFRESH_COOKIE];
@@ -59,8 +54,7 @@ export class AuthController {
       throw new UnauthorizedException('refresh token cookie missing');
     }
     const result = await this.auth.refresh(rawToken);
-    this.setRefreshCookie(reply, result.refreshToken, result.refreshExpiresInSeconds);
-    return { accessToken: result.accessToken, user: result.user };
+    return this.respond(reply, result);
   }
 
   /** The access JWT stays valid until it expires. */
@@ -68,7 +62,7 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(
-    @Req() req: CookieRequest,
+    @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
     const rawToken = req.cookies[REFRESH_COOKIE];
@@ -80,8 +74,16 @@ export class AuthController {
 
   @Get('me')
   @ZodSerializerDto(AuthUserDto)
-  me(@CurrentUser() user: AuthUser): AuthUserBody {
+  me(@CurrentUser() user: AuthUser): AuthUser {
     return user;
+  }
+
+  private respond(
+    reply: FastifyReply,
+    result: Awaited<ReturnType<AuthService['login']>>,
+  ): AuthResponse {
+    this.setRefreshCookie(reply, result.refreshToken, result.refreshExpiresInSeconds);
+    return { accessToken: result.accessToken, user: result.user };
   }
 
   private setRefreshCookie(reply: FastifyReply, token: string, maxAge: number): void {
