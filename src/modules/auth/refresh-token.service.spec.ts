@@ -1,6 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { PinoLogger } from 'nestjs-pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 import { RefreshTokenService } from './refresh-token.service';
@@ -33,8 +34,11 @@ describe('RefreshTokenService', () => {
   let service: RefreshTokenService;
   let client: ReturnType<typeof makeFakeRedisClient>;
 
+  let logger: { warn: ReturnType<typeof vi.fn>; setContext: ReturnType<typeof vi.fn> };
+
   beforeEach(async () => {
     client = makeFakeRedisClient();
+    logger = { warn: vi.fn(), setContext: vi.fn() };
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
         RefreshTokenService,
@@ -43,6 +47,7 @@ describe('RefreshTokenService', () => {
           provide: ConfigService,
           useValue: { get: () => 604_800 },
         },
+        { provide: PinoLogger, useValue: logger },
       ],
     }).compile();
     service = moduleRef.get(RefreshTokenService);
@@ -73,16 +78,28 @@ describe('RefreshTokenService', () => {
     );
   });
 
-  it.each(['not json', '{"userId":"not-a-uuid"}', '{}'])(
-    'rejects a corrupted stored value (%s) with 401',
-    async (corrupt) => {
-      const { token } = await service.mint(USER_1);
-      const key = [...client._store.keys()][0] ?? '';
-      client._store.set(key, corrupt);
+  it.each([
+    ['not json', 'corrupt_json'],
+    ['{"userId":"not-a-uuid"}', 'invalid_payload'],
+    ['{}', 'invalid_payload'],
+  ])('rejects a corrupted stored value (%s) with 401 and warns', async (corrupt, reason) => {
+    const { token } = await service.mint(USER_1);
+    const key = [...client._store.keys()][0] ?? '';
+    client._store.set(key, corrupt);
 
-      await expect(service.consume(token)).rejects.toBeInstanceOf(UnauthorizedException);
-    },
-  );
+    await expect(service.consume(token)).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(logger.warn).toHaveBeenCalledWith({ reason }, 'refresh rejected');
+  });
+
+  it('warns with a reason on reuse and never logs the token', async () => {
+    const { token } = await service.mint(USER_1);
+    await service.consume(token);
+    await expect(service.consume(token)).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith({ reason: 'unknown_or_reused' }, 'refresh rejected');
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(token);
+  });
 
   it('revoke is safe to call with an unknown token', async () => {
     await expect(service.revoke('nope')).resolves.toBeUndefined();

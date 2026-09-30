@@ -1,9 +1,15 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PinoLogger } from 'nestjs-pino';
 import { z } from 'zod';
 import type { AppConfigService } from '../../config';
 import { RedisService } from '../../infrastructure/redis/redis.service';
+
+type RejectReason = 'unknown_or_reused' | 'corrupt_json' | 'invalid_payload';
+
+// Sentinel so unparseable data stays distinct from a legitimately parsed JSON value.
+const CORRUPT = Symbol('corrupt');
 
 const StoredRefreshTokenSchema = z.object({ userId: z.uuid() });
 
@@ -22,7 +28,10 @@ export class RefreshTokenService {
   constructor(
     private readonly redis: RedisService,
     @Inject(ConfigService) private readonly config: AppConfigService,
-  ) {}
+    private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(RefreshTokenService.name);
+  }
 
   async mint(userId: string): Promise<MintedRefreshToken> {
     const raw = randomBytes(32).toString('base64url');
@@ -37,11 +46,16 @@ export class RefreshTokenService {
   async consume(rawToken: string): Promise<string> {
     const stored = await this.redis.client.getdel(this.redisKey(rawToken));
     if (!stored) {
-      throw new UnauthorizedException('invalid refresh token');
+      // Reuse of a single-use token looks the same as an unknown one, and is the signal to watch.
+      return this.reject('unknown_or_reused');
     }
-    const parsed = StoredRefreshTokenSchema.safeParse(this.parseJson(stored));
+    const json = this.parseJson(stored);
+    if (json === CORRUPT) {
+      return this.reject('corrupt_json');
+    }
+    const parsed = StoredRefreshTokenSchema.safeParse(json);
     if (!parsed.success) {
-      throw new UnauthorizedException('invalid refresh token');
+      return this.reject('invalid_payload');
     }
     return parsed.data.userId;
   }
@@ -50,11 +64,17 @@ export class RefreshTokenService {
     await this.redis.client.del(this.redisKey(rawToken));
   }
 
+  private reject(reason: RejectReason): never {
+    // Never log the token or stored value: both are credentials.
+    this.logger.warn({ reason }, 'refresh rejected');
+    throw new UnauthorizedException('invalid refresh token');
+  }
+
   private parseJson(raw: string): unknown {
     try {
       return JSON.parse(raw);
     } catch (_err) {
-      return null;
+      return CORRUPT;
     }
   }
 
