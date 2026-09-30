@@ -1,7 +1,5 @@
-// MUST be imported before any NestJS / Node module that should be
-// instrumented — auto-instrumentation patches modules at load time.
-// See src/observability/tracing.ts. Common Pitfall #19 in the v2 doc.
-import './observability/tracing';
+// Must load first: auto-instrumentation patches modules at import time.
+import { otelSdk } from './observability/tracing';
 
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
@@ -11,72 +9,58 @@ import { VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { Logger } from 'nestjs-pino';
+import { Logger, PinoLogger } from 'nestjs-pino';
 import { AppModule } from './app.module';
-import type { AppConfig } from './config/configuration';
+import { registerGracefulShutdown } from './bootstrap/graceful-shutdown';
+import type { AppConfigService } from './config';
+import { parseEnv } from './config/env.schema';
+
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
+
+function requestId(req: IncomingMessage | Http2ServerRequest): string {
+  const incoming = req.headers['x-request-id']?.toString();
+  return incoming && REQUEST_ID_PATTERN.test(incoming) ? incoming : randomUUID();
+}
 
 async function bootstrap(): Promise<void> {
+  // parseEnv, not AppConfigService: the Fastify adapter is built before the Nest container exists.
+  const trustProxyHops = parseEnv().TRUST_PROXY_HOPS;
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({
-      // Disable Fastify's built-in logger; nestjs-pino owns logging.
       logger: false,
-      // Required when running behind an ingress / load balancer in K8s.
-      trustProxy: true,
-      // Default 1 MB body limit; raise explicitly per route if needed.
+      // Trust only the known ingress hops; blanket true lets clients spoof X-Forwarded-For.
+      trustProxy: trustProxyHops === 0 ? false : trustProxyHops,
       bodyLimit: 1_048_576,
-      genReqId: (req: IncomingMessage | Http2ServerRequest) =>
-        req.headers['x-request-id']?.toString() ?? randomUUID(),
+      genReqId: requestId,
     }),
-    // Buffer log lines until `useLogger` swaps the default Nest logger
-    // for pino — without this the bootstrap lines come out as plain
-    // text and are hard to grep alongside JSON request logs.
+    // Keeps bootstrap lines in JSON once pino takes over.
     { bufferLogs: true },
   );
 
-  // Hand request logging and bootstrap logs to pino.
   app.useLogger(app.get(Logger));
 
-  // URI versioning so business endpoints live under /v1, /v2, etc.
-  // Health endpoints stay un-versioned (no `version` on the controller).
   app.enableVersioning({ type: VersioningType.URI });
 
-  // Required so SIGTERM in K8s triggers OnModuleDestroy hooks.
-  app.enableShutdownHooks();
+  registerGracefulShutdown(app, await app.resolve(PinoLogger), () => otelSdk.shutdown());
 
-  // Read port and cookie/CORS config via ConfigService so values come
-  // from the validated env schema (parsed + coerced), not ad-hoc
-  // process.env reads.
-  const config = app.get(ConfigService<{ app: AppConfig }, true>);
+  const config = app.get<AppConfigService>(ConfigService);
   const port = config.get('app.port', { infer: true });
   const corsOrigins = config.get('app.cors.origins', { infer: true });
   const cookieSecure = config.get('app.cookie.secure', { infer: true });
   const cookieDomain = config.get('app.cookie.domain', { infer: true });
   const cookieSameSite = config.get('app.cookie.sameSite', { infer: true });
 
-  // Register @fastify/cookie BEFORE listen so that cookie parsing is
-  // available on every request. Plugin defaults apply to all setCookie
-  // calls unless overridden per-call in the controller.
-  //
-  // Cast is required: two copies of the `fastify` types exist in the tree —
-  // the root one @fastify/cookie is compiled against, and the one bundled
-  // under @nestjs/platform-fastify that the adapter uses. They are
-  // structurally identical at runtime, so we cast the plugin to the exact
-  // parameter type `app.register` expects. Standard pattern for Fastify
-  // plugins under the NestJS adapter.
+  // Cast: two copies of the fastify types exist (root vs @nestjs/platform-fastify).
   await app.register(fastifyCookie as unknown as Parameters<typeof app.register>[0], {
     defaults: {
       secure: cookieSecure,
       sameSite: cookieSameSite,
-      // domain is optional — omit when undefined to avoid sending an explicit
-      // Domain=undefined attribute which some browsers reject.
+      // Omit when unset: some browsers reject a literal Domain=undefined.
       ...(cookieDomain ? { domain: cookieDomain } : {}),
     },
   });
 
-  // CORS — credentials:true requires an explicit origin allowlist.
-  // Wildcard '*' with credentials is rejected by browsers and we
-  // enforce it at config level (no wildcard in CORS_ORIGINS schema).
   app.enableCors({
     origin: corsOrigins,
     credentials: true,
@@ -85,7 +69,7 @@ async function bootstrap(): Promise<void> {
     exposedHeaders: ['Content-Range', 'X-Request-Id'],
   });
 
-  // Bind to 0.0.0.0 — without this, the container is unreachable from outside the pod.
+  // Required for the container to be reachable from outside the pod.
   await app.listen(port, '0.0.0.0');
 }
 

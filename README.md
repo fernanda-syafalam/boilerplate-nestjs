@@ -124,6 +124,7 @@ Mirror its shape when adding a new bounded context.
 | Local Postgres up/down  | `pnpm db:up` / `pnpm db:down`            |
 | Generate migration      | `pnpm db:generate`                       |
 | Apply migrations        | `pnpm db:migrate`                        |
+| Apply migrations (prod) | `pnpm db:migrate:prod` (compiled, no drizzle-kit) |
 
 ## Container & deploy
 
@@ -139,8 +140,9 @@ docker run --rm -p 3000:3000 \
   boilerplate-nestjs:dev
 ```
 
-Kubernetes manifests are in `k8s/` and are pinned to v2 doc Pilar 9
-defaults: separate liveness/readiness probes, non-root, resource
+The same image runs the API (default), the worker (`dist/worker.js`) and
+migrations (`dist/infrastructure/database/scripts/migrate.js`, run as a Job before
+the rollout). Kubernetes manifests are in `k8s/` with: separate liveness/readiness probes, non-root, resource
 requests/limits, an HPA on CPU, and a `terminationGracePeriodSeconds`
 that gives in-flight work time to drain. Tag the image with the commit
 SHA — never `:latest`.
@@ -149,7 +151,7 @@ SHA — never `:latest`.
 
 `.github/workflows/ci.yml` runs three parallel jobs on every PR:
 
-- **Typecheck + Lint + Build** — `pnpm typecheck`, `pnpm lint:ci`, `pnpm build`
+- **Typecheck + Lint + Build** — `pnpm typecheck`, `pnpm db:check`, `pnpm lint:ci`, `pnpm build`
 - **Unit + E2E** — `pnpm test:cov`; coverage artifact uploaded
 - **Integration (Testcontainers)** — `pnpm test:int` against a real Postgres
 

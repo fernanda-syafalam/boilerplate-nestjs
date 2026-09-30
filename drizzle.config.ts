@@ -1,21 +1,16 @@
 import { defineConfig } from 'drizzle-kit';
+import { databaseEnvSchema } from './src/config/env.schema';
 
-/**
- * drizzle-kit configuration. Source of truth lives in
- * src/infrastructure/database/schema/. Generated migrations land in
- * ./drizzle/ and must be committed (Pilar 8).
- *
- * Migrations are applied by the deploy pipeline, never by the
- * application at runtime — see Pilar 8, "Migration di-apply lewat
- * pipeline".
- */
+// drizzle-kit loads .env from the cwd before evaluating this file. `generate` and `check`
+// (CI static job) need no database, so credentials are optional here; `migrate`/`studio`
+// then fail inside drizzle-kit instead of silently targeting localhost.
+const database = databaseEnvSchema.safeParse(process.env);
+
 export default defineConfig({
   schema: './src/infrastructure/database/schema/index.ts',
   out: './drizzle',
   dialect: 'postgresql',
-  dbCredentials: {
-    url: process.env.DATABASE_URL ?? 'postgres://app:app@localhost:5432/app',
-  },
+  ...(database.success && { dbCredentials: { url: database.data.DATABASE_URL } }),
   strict: true,
   verbose: true,
 });

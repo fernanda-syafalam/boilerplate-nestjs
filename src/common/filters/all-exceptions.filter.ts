@@ -1,23 +1,16 @@
+import { STATUS_CODES } from 'node:http';
 import {
   type ArgumentsHost,
   Catch,
   type ExceptionFilter,
   HttpException,
   HttpStatus,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { PinoLogger } from 'nestjs-pino';
 import { ZodError } from 'zod';
 
-/**
- * RFC 7807 Problem Details body. The `type` URI is a placeholder that
- * teams typically point at their internal error catalogue. `instance`
- * is the request URL so support can correlate without a request id.
- *
- * Optional, non-RFC field: `requestId`. Standard problem+json allows
- * extension members; we add ours so support can grep logs without
- * passing the URL around.
- */
 interface ProblemDetails {
   type: string;
   title: string;
@@ -26,16 +19,76 @@ interface ProblemDetails {
   instance: string;
   errors?: unknown;
   requestId?: string;
+  [extension: string]: unknown;
 }
 
-/**
- * Translates every uncaught error into a uniform `application/problem+json`
- * response. Internal details (stack, server-side error message) are
- * logged at the appropriate level and never sent to the client.
- *
- * Wired globally via APP_FILTER in AppModule so it has full DI access
- * (PinoLogger, etc.). See v2 doc, Pilar 2.
- */
+const RESERVED_MEMBERS = new Set(['message', 'error', 'statusCode', 'status']);
+
+const SERVER_ERROR_EXTENSIONS = new Set(['checks']);
+
+function extensionMembers(obj: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(obj).filter(([key]) => !RESERVED_MEMBERS.has(key)));
+}
+
+function pickAllowed(obj: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([key]) => SERVER_ERROR_EXTENSIONS.has(key)),
+  );
+}
+
+interface Problem {
+  status: number;
+  body: ProblemDetails;
+}
+
+/** Pure mapping: no logging, no IO, so the RFC 7807 shape is testable without a reply. */
+function toProblem(exception: unknown, request: { url: string; id?: unknown }): Problem {
+  let status: number = HttpStatus.INTERNAL_SERVER_ERROR;
+  let title = 'Internal Server Error';
+  let detail: string | undefined;
+  let errors: unknown;
+  let extensions: Record<string, unknown> = {};
+
+  if (exception instanceof ZodError) {
+    status = HttpStatus.BAD_REQUEST;
+    // Must match the global ZodValidationPipe body (issues + lowercase title) so clients parse one shape.
+    title = 'Validation failed';
+    errors = exception.issues;
+  } else if (exception instanceof HttpException) {
+    status = exception.getStatus();
+    const res = exception.getResponse();
+    title = exception.message;
+    if (typeof res === 'object' && res !== null) {
+      const obj = res as Record<string, unknown>;
+      if (typeof obj.message === 'string') title = obj.message;
+      if (typeof obj.detail === 'string') detail = obj.detail;
+      if ('errors' in obj) errors = obj.errors;
+      extensions = extensionMembers(obj);
+    }
+    // 5xx bodies may carry internals; expose only the standard phrase and allowlisted members.
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      title = STATUS_CODES[status] ?? 'Internal Server Error';
+      detail = undefined;
+      errors = undefined;
+      extensions = pickAllowed(extensions);
+    }
+  }
+
+  return {
+    status,
+    body: {
+      ...extensions,
+      type: `https://errors.example.com/${status}`,
+      title,
+      status,
+      detail,
+      instance: request.url,
+      errors,
+      requestId: request.id?.toString(),
+    },
+  };
+}
+
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   constructor(private readonly logger: PinoLogger) {
@@ -45,42 +98,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const reply = ctx.getResponse<FastifyReply>();
-    const req = ctx.getRequest<FastifyRequest>();
+    const { status, body } = toProblem(exception, ctx.getRequest<FastifyRequest>());
 
-    let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let title = 'Internal Server Error';
-    let detail: string | undefined;
-    let errors: unknown;
-
-    if (exception instanceof ZodError) {
-      status = HttpStatus.BAD_REQUEST;
-      title = 'Validation Failed';
-      errors = exception.flatten();
-    } else if (exception instanceof HttpException) {
-      status = exception.getStatus();
-      const res = exception.getResponse();
-      title = exception.message;
-      if (typeof res === 'object' && res !== null) {
-        const obj = res as Record<string, unknown>;
-        if (typeof obj.message === 'string') title = obj.message;
-        if (typeof obj.detail === 'string') detail = obj.detail;
-        if ('errors' in obj) errors = obj.errors;
-      }
-    } else if (exception instanceof Error) {
-      // Server-side log keeps the full stack; the client never sees it.
-      this.logger.error({ err: exception }, 'unhandled exception');
-    }
-
-    const body: ProblemDetails = {
-      type: `https://errors.example.com/${status}`,
-      title,
-      status,
-      detail,
-      instance: req.url,
-      errors,
-      requestId: req.id?.toString(),
-    };
+    this.logServerError(exception, status);
 
     reply.status(status).type('application/problem+json').send(body);
+  }
+
+  private logServerError(exception: unknown, status: number): void {
+    if (status < HttpStatus.INTERNAL_SERVER_ERROR) return;
+    // A thrown 503 is the readiness probe reporting a down dependency, not a bug; error-level would alert on every probe.
+    if (exception instanceof ServiceUnavailableException) {
+      this.logger.warn({ err: exception }, 'service unavailable');
+    } else {
+      this.logger.error({ err: exception }, 'unhandled exception');
+    }
   }
 }

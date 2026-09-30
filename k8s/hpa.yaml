@@ -17,14 +17,12 @@ spec:
           type: Utilization
           averageUtilization: 70
   behavior:
-    # Scale down slowly to avoid flapping during traffic dips.
     scaleDown:
       stabilizationWindowSeconds: 300
       policies:
         - type: Percent
           value: 50
           periodSeconds: 60
-    # Scale up quickly when load arrives.
     scaleUp:
       stabilizationWindowSeconds: 30
       policies:

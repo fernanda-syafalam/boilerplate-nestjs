@@ -1,8 +1,10 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import * as argon2 from 'argon2';
+import { PinoLogger } from 'nestjs-pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { User } from '../../infrastructure/database/schema/users.schema';
+import { PasswordHasher } from '../../infrastructure/security/password-hasher';
+import { decodeCursor, encodeCursor } from './users.cursor';
 import { UsersRepository } from './users.repository';
 import { UsersService } from './users.service';
 
@@ -19,91 +21,138 @@ const sampleUser: User = {
 
 describe('UsersService', () => {
   let service: UsersService;
+  let hasher: { hash: ReturnType<typeof vi.fn> };
   let repo: {
-    findById: ReturnType<typeof vi.fn>;
-    findByEmail: ReturnType<typeof vi.fn>;
+    findActiveById: ReturnType<typeof vi.fn>;
+    findActiveByEmail: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     listPage: ReturnType<typeof vi.fn>;
     softDelete: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
+    hasher = { hash: vi.fn().mockResolvedValue('hashed-by-hasher') };
     repo = {
-      findById: vi.fn(),
-      findByEmail: vi.fn(),
+      findActiveById: vi.fn(),
+      findActiveByEmail: vi.fn(),
       create: vi.fn(),
       listPage: vi.fn(),
       softDelete: vi.fn(),
     };
     const moduleRef: TestingModule = await Test.createTestingModule({
-      providers: [UsersService, { provide: UsersRepository, useValue: repo }],
+      providers: [
+        UsersService,
+        { provide: PasswordHasher, useValue: hasher },
+        { provide: UsersRepository, useValue: repo },
+        { provide: PinoLogger, useValue: { info: vi.fn(), setContext: vi.fn() } },
+      ],
     }).compile();
     service = moduleRef.get(UsersService);
   });
 
   describe('create', () => {
     it('hashes the password and inserts a new user', async () => {
-      repo.findByEmail.mockResolvedValue(null);
       repo.create.mockResolvedValue(sampleUser);
 
       const created = await service.create({
         email: 'a@b.test',
         fullName: 'A B',
         password: 'correct horse battery staple',
-        role: 'customer',
       });
 
       expect(created).toEqual(sampleUser);
       expect(repo.create).toHaveBeenCalledTimes(1);
       const call = repo.create.mock.calls[0]?.[0];
-      expect(call?.passwordHash).toMatch(/^\$argon2id\$/);
-      // Sanity check: the plain password must never be stored.
-      expect(call?.passwordHash).not.toContain('correct horse');
+      expect(hasher.hash).toHaveBeenCalledWith('correct horse battery staple');
+      expect(call?.passwordHash).toBe('hashed-by-hasher');
+      expect(call?.role).toBe('customer');
     });
 
     it('rejects when email is already taken', async () => {
-      repo.findByEmail.mockResolvedValue(sampleUser);
+      repo.create.mockResolvedValue(null);
       await expect(
         service.create({
           email: sampleUser.email,
           fullName: 'X',
           password: 'a-fresh-password-here',
-          role: 'customer',
         }),
       ).rejects.toBeInstanceOf(ConflictException);
-      expect(repo.create).not.toHaveBeenCalled();
     });
   });
 
-  describe('findById', () => {
-    it('returns the user when present', async () => {
-      repo.findById.mockResolvedValue(sampleUser);
-      await expect(service.findById(sampleUser.id)).resolves.toBe(sampleUser);
+  describe('findVisibleTo', () => {
+    const actor = (id: string, role: 'admin' | 'customer') => ({
+      id,
+      email: 'x@y.test',
+      fullName: 'X',
+      role,
     });
 
-    it('throws 404 when missing', async () => {
-      repo.findById.mockResolvedValue(null);
-      await expect(service.findById('missing')).rejects.toBeInstanceOf(NotFoundException);
+    it('lets a user read themself', async () => {
+      repo.findActiveById.mockResolvedValue(sampleUser);
+      await expect(
+        service.findVisibleTo(sampleUser.id, actor(sampleUser.id, 'customer')),
+      ).resolves.toBe(sampleUser);
+    });
+
+    it('lets an admin read anyone', async () => {
+      repo.findActiveById.mockResolvedValue(sampleUser);
+      await expect(service.findVisibleTo(sampleUser.id, actor('other', 'admin'))).resolves.toBe(
+        sampleUser,
+      );
+    });
+
+    it('404s for another non-admin without touching the repo', async () => {
+      await expect(
+        service.findVisibleTo(sampleUser.id, actor('other', 'customer')),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(repo.findActiveById).not.toHaveBeenCalled();
+    });
+
+    it('404s when the user is missing', async () => {
+      repo.findActiveById.mockResolvedValue(null);
+      await expect(service.findVisibleTo('gone', actor('gone', 'customer'))).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 
-  describe('hash compatibility', () => {
-    // Sanity check the argon2 binding is wired and the chosen
-    // parameters produce a verifiable hash. Slow (~50 ms) but only one
-    // case so cost is bounded.
-    it('produces a hash that argon2.verify accepts', async () => {
-      repo.findByEmail.mockResolvedValue(null);
-      repo.create.mockImplementation(async (input) => ({ ...sampleUser, ...input }));
+  describe('softDelete', () => {
+    it('404s when nothing was deleted', async () => {
+      repo.softDelete.mockResolvedValue(false);
+      await expect(service.softDelete('x')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
 
-      const created = await service.create({
-        email: 'verify@test',
-        fullName: 'V',
-        password: 'another-secret-pass-9',
-        role: 'customer',
-      });
+  describe('list', () => {
+    const second: User = { ...sampleUser, id: '00000000-0000-4000-8000-000000000002' };
 
-      const ok = await argon2.verify(created.passwordHash, 'another-secret-pass-9');
-      expect(ok).toBe(true);
+    it('builds nextCursor from the last returned item when more rows exist', async () => {
+      repo.listPage.mockResolvedValue({ items: [sampleUser, second], hasMore: true });
+
+      const page = await service.list(undefined, 2);
+
+      expect(repo.listPage).toHaveBeenCalledWith(undefined, 2);
+      expect(page.items).toEqual([sampleUser, second]);
+      expect(page.nextCursor).toBe(encodeCursor(second));
+    });
+
+    it('returns a null cursor on the last page', async () => {
+      repo.listPage.mockResolvedValue({ items: [sampleUser], hasMore: false });
+
+      const page = await service.list(undefined, 2);
+
+      expect(page.nextCursor).toBeNull();
+    });
+
+    it('turns a round-tripped cursor back into the id and Date the repository pages from', async () => {
+      repo.listPage.mockResolvedValue({ items: [], hasMore: false });
+      const cursor = decodeCursor(encodeCursor(second));
+      if (!cursor) throw new Error('cursor should decode');
+
+      await service.list(cursor, 2);
+
+      expect(repo.listPage).toHaveBeenCalledWith({ id: second.id, createdAt: second.createdAt }, 2);
     });
   });
 });

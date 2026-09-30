@@ -9,7 +9,7 @@ import type { FastifyRequest } from 'fastify';
 import { PinoLogger } from 'nestjs-pino';
 import { type Observable, tap } from 'rxjs';
 import { AUDIT_KEY } from '../decorators/audit.decorator';
-import type { AuthUser } from '../decorators/current-user.decorator';
+import type { AuthUser } from '../types/auth-user';
 
 interface AuditEvent {
   audit: true;
@@ -20,15 +20,7 @@ interface AuditEvent {
   err?: string;
 }
 
-/**
- * Emits a structured `audit: true` log line for any handler annotated
- * with `@Audit('<action>')`. Pino redact rules already strip secrets,
- * so the log shipper can split by `audit:true` and forward to the
- * compliance pipeline without further filtering.
- *
- * Wired globally via APP_INTERCEPTOR; handlers without `@Audit` are a
- * no-op pass-through.
- */
+/** Secrets are stripped by pino redact; the log shipper routes audit:true lines. */
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
   constructor(

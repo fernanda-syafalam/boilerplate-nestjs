@@ -1,14 +1,8 @@
 import { registerAs } from '@nestjs/config';
-import { envSchema } from './env.schema';
+import { parseEnv } from './env.schema';
 
-/**
- * Typed config object loaded into ConfigModule. Parses (does not just
- * cast) `process.env` here so coerced values (number, enum) reach the
- * config — see ADR-0002 / v2 Best Practices doc, Pilar 1 for the
- * "parse, don't cast" rationale.
- */
 export const appConfig = registerAs('app', () => {
-  const env = envSchema.parse(process.env);
+  const env = parseEnv();
   return {
     nodeEnv: env.NODE_ENV,
     port: env.PORT,
@@ -26,12 +20,13 @@ export const appConfig = registerAs('app', () => {
     jwt: {
       secret: env.JWT_SECRET,
       expiresIn: env.JWT_EXPIRES_IN,
+      issuer: env.JWT_ISSUER,
+      audience: env.JWT_AUDIENCE,
       refreshTokenTtlSeconds: env.REFRESH_TOKEN_TTL_SECONDS,
     },
     logLevel: env.LOG_LEVEL,
     cors: {
-      // Split here so downstream code gets a ready-to-use string array.
-      origins: env.CORS_ORIGINS.split(',').map((o) => o.trim()),
+      origins: env.CORS_ORIGINS,
     },
     cookie: {
       secure: env.COOKIE_SECURE,

@@ -3,39 +3,36 @@
 NestJS service boilerplate. Goal: become the reference implementation
 for the v2 Best Practices doc and the two ADRs accepted in this repo.
 
-## Repo state (as of 2026-05-07)
+## Repo state (as of 2026-09-29)
 
 Tooling, infrastructure, and the first reference modules are in place:
 
-- `HealthModule` (`/healthz`, `/readyz` with real DB ping) — `@Public()`
-- `UsersModule` under `/v1/users` — full Pilar 1+3+4+5 example with
-  argon2id hashing, cursor pagination, unit + integration tests
-- `AuthModule` under `/v1/auth` — login + JWT issuance + opaque
-  refresh-token rotation (single-use, 7-day TTL, stored hashed in
-  Redis); endpoints `login` / `refresh` / `logout` / `me`.
-  `JwtAuthGuard` registered globally so every endpoint requires a JWT
-  unless `@Public()` is applied; `@CurrentUser` decorator for handlers
-- `RolesGuard` global, opt-in via `@Roles('admin', ...)` for coarse
-  RBAC; resource ownership stays in the service
-- `AuditInterceptor` global, opt-in via `@Audit('action.name')` —
-  emits structured `audit: true` log lines with actor + target +
-  outcome for compliance pipelines
-- `AppLoggerModule` (nestjs-pino) — JSON logs in prod, pino-pretty in
-  dev; redacts password / token / authorization fields; every line
-  carries the Fastify request id
-- `AllExceptionsFilter` — uniform `application/problem+json` (RFC 7807)
-  responses; never leaks server-side stack traces to the client
-- `RedisModule` (ioredis) — single shared client for the throttler
-  + BullMQ
-- `ThrottlerGuard` global, Redis-backed (Pilar 2) — limit consistent
-  across pods, configurable via `THROTTLER_TTL_MS` / `THROTTLER_LIMIT`
-- `QueueModule` + `EmailModule` — BullMQ wired with idempotent
-  `jobId`, attempts + exponential backoff defaults, capped
-  `removeOnComplete`/`removeOnFail`. `dist/worker.js` runs the
-  consumer in a separate process; same image as the API, override
-  the container command (Pilar 7)
-- Env validation via zod parsed at startup; `ZodValidationPipe`
-  global; URI versioning enabled
+- `HealthModule` (`/healthz` dependency-free, `/readyz` pings Postgres + Redis) — `@Public()`
+- `UsersModule` under `/v1/users` — public signup always creates a
+  `customer` (no client-set role); list is admin-only; `:id` is
+  admin-or-self (404 otherwise); uuid params and cursors validated by
+  zod DTOs; email conflicts → 409 via `onConflictDoNothing`. Exports
+  only `UsersService` — other modules never touch `UsersRepository`
+- `AuthModule` under `/v1/auth` — login, JWT (HS256, issuer + audience
+  verified), opaque single-use refresh tokens stored hashed in Redis
+  and delivered as an httpOnly cookie; `login` / `refresh` / `logout` / `me`
+- `SecurityModule` — `PasswordHasher` (argon2id, OWASP params) is the only
+  place that hashes/verifies passwords, incl. a dummy verify for unknown emails
+- Global guards in order: `ThrottlerGuard` (Redis-backed) → `JwtAuthGuard`
+  (default-deny, opt out with `@Public()`) → `RolesGuard` (`@Roles(...)`)
+- Global `ZodValidationPipe` + `ZodSerializerInterceptor`: bind response
+  shapes with `@ZodSerializerDto` so undeclared fields (e.g. `passwordHash`) are stripped
+- `AuditInterceptor` global, opt-in via `@Audit('action.name')`
+- Logging: inject `PinoLogger` (+ `setContext`) everywhere; never `new Logger()`
+- `AllExceptionsFilter` — RFC 7807; 5xx bodies carry only standard members
+  (extension allowlist: `checks`) and are always logged
+- Config: env parsed once (`parseEnv()`), `AppConfigModule` shared by API
+  and worker; inject as `AppConfigService` with `@Inject(ConfigService)`
+- Email: `EmailModule` (producer, API) vs `EmailWorkerModule` (processor,
+  worker only). BullMQ custom job ids must not contain `:`
+- Shutdown (ADR-0003): `registerGracefulShutdown` closes Nest, then flushes OTel, then exits
+- Ops: one image, three entrypoints — `dist/main.js`, `dist/worker.js`,
+  `dist/infrastructure/database/scripts/migrate.js` (k8s `migrate-job.yaml`)
 - `AppModule` is a pure composition root
 
 | Aspect             | Current state                                | Target state                                            | Reference       |
@@ -59,7 +56,7 @@ Tooling, infrastructure, and the first reference modules are in place:
 - **Cache / Queue:** Redis 7+, BullMQ
 - **Container:** multi-stage Docker, distroless runtime (`Dockerfile` at repo root)
 - **CI:** GitHub Actions — `static`, `test`, and `integration` jobs (`.github/workflows/ci.yml`)
-- **K8s manifests:** `k8s/` — Deployment + Service + HPA + ConfigMap + Secret template (Pilar 9 defaults)
+- **K8s manifests:** `k8s/` — API + worker Deployments, migrate Job, Service, HPA, ConfigMap, Secret template
 - **Observability:** nestjs-pino (live) → OpenTelemetry → Tempo / Loki / Mimir (planned)
 
 ## Required reading (do not re-discuss)
@@ -69,6 +66,7 @@ All decisions are already documented:
 - `docs/Backend-Best-Practices-NestJS-v2.md` — pattern detail per pilar
 - `docs/adr/0001-use-drizzle-orm-over-prisma.md` — why Drizzle (not Prisma)
 - `docs/adr/0002-tooling-vitest-biome-zod.md` — why Vitest + Biome + zod
+- `docs/adr/0003-custom-graceful-shutdown.md` — why custom shutdown, not `enableShutdownHooks()`
 
 If the user asks "why X", do not re-derive — check the ADR or v2 doc.
 If a decision is genuinely obsolete, propose a new ADR; do not silently
@@ -95,7 +93,11 @@ src/
 ├── infrastructure/
 │   ├── database/schema/*.ts     # Drizzle pgTable schemas
 │   ├── database/drizzle.{service,module}.ts
+│   ├── database/scripts/        # migrate.ts (prod runtime), seed.ts (dev, not built)
+│   ├── security/                # password hasher
 │   ├── redis/, queue/, logger/
+├── bootstrap/                   # graceful shutdown shared by main.ts and worker.ts
+├── observability/               # OpenTelemetry tracing
 ├── app.module.ts                # composition root only
 └── main.ts                      # FastifyAdapter bootstrap
 ```
@@ -116,6 +118,7 @@ src/
 | Local DB up | `pnpm db:up` (docker compose Postgres)        |
 | DB down     | `pnpm db:down`                                |
 | DB migrate  | `pnpm db:generate` then `pnpm db:migrate`     |
+| DB migrate (prod image) | `node dist/infrastructure/database/scripts/migrate.js` |
 
 ## Agent routing (project override)
 

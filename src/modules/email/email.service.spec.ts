@@ -28,9 +28,22 @@ describe('EmailService', () => {
     expect(payload).toMatchObject({
       to: 'a@b.test',
       templateId: 'order-confirm',
-      idempotencyKey: 'order-confirm:order-1',
+      idempotencyKey: 'order-confirm-order-1',
     });
-    // jobId == idempotencyKey so BullMQ rejects duplicates at insert.
-    expect(options).toEqual({ jobId: 'order-confirm:order-1' });
+    expect(options).toEqual({ jobId: 'order-confirm-order-1' });
+  });
+
+  it("uses a jobId without ':' (BullMQ rejects custom ids containing it)", async () => {
+    await service.sendOrderConfirmation('order-1', 'a@b.test', {});
+
+    const options = queueAdd.mock.calls[0]?.[2] as { jobId: string };
+    expect(options.jobId).not.toContain(':');
+  });
+
+  it('rejects an invalid recipient before touching the queue', async () => {
+    await expect(service.sendOrderConfirmation('order-1', 'not-an-email', {})).rejects.toThrow(
+      'invalid email request: to:invalid_format',
+    );
+    expect(queueAdd).not.toHaveBeenCalled();
   });
 });

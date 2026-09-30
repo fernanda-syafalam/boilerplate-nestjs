@@ -1,26 +1,15 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import type { AppConfig } from '../../config/configuration';
+import type { AppConfigService } from '../../config';
 
-/**
- * Root BullMQ wiring (queue + worker share the same defaults). Pilar 7
- * defaults that have caused production fires when omitted:
- *
- * - `removeOnComplete` / `removeOnFail` capped — without this Redis
- *   slowly fills with old jobs over months.
- * - `attempts` + exponential backoff — every job is retry-friendly by
- *   default; opt out per-job if a fast-fail is desired.
- *
- * Per-queue overrides go in each domain's `BullModule.registerQueue`
- * call (see `email.module.ts`).
- */
+/** Capped removeOn* keeps Redis bounded; per-queue overrides go in registerQueue. */
 @Module({
   imports: [
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService<{ app: AppConfig }, true>) => ({
+      useFactory: (config: AppConfigService) => ({
         connection: { url: config.get('app.redis.url', { infer: true }) },
         defaultJobOptions: {
           attempts: 3,

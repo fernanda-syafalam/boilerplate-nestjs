@@ -10,13 +10,8 @@ import { DrizzleService } from '../src/infrastructure/database/drizzle.service';
 import type { User } from '../src/infrastructure/database/schema/users.schema';
 import { RedisService } from '../src/infrastructure/redis/redis.service';
 import { UsersRepository } from '../src/modules/users/users.repository';
+import { inMemoryThrottler } from './support/in-memory-throttler';
 
-/**
- * E2E coverage for the auth flow without a real Postgres. The
- * UsersRepository is overridden with an in-memory fake so the test
- * exercises the full pipeline (controller → guard → strategy → service)
- * but stays fast and offline.
- */
 describe('Auth (e2e)', () => {
   let app: NestFastifyApplication;
   let storedUser: User;
@@ -26,7 +21,7 @@ describe('Auth (e2e)', () => {
       type: argon2.argon2id,
     });
     storedUser = {
-      id: '00000000-0000-0000-0000-000000000001',
+      id: '00000000-0000-4000-8000-000000000001',
       email: 'alice@b.test',
       fullName: 'Alice',
       passwordHash,
@@ -37,8 +32,10 @@ describe('Auth (e2e)', () => {
     };
 
     const fakeRepo = {
-      findById: vi.fn(async (id: string) => (id === storedUser.id ? storedUser : null)),
-      findByEmail: vi.fn(async (email: string) => (email === storedUser.email ? storedUser : null)),
+      findActiveById: vi.fn(async (id: string) => (id === storedUser.id ? storedUser : null)),
+      findActiveByEmail: vi.fn(async (email: string) =>
+        email === storedUser.email ? storedUser : null,
+      ),
       create: vi.fn(),
       listPage: vi.fn(),
       softDelete: vi.fn(),
@@ -47,6 +44,8 @@ describe('Auth (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(inMemoryThrottler.token)
+      .useValue(inMemoryThrottler.options)
       .overrideProvider(DrizzleService)
       .useValue({
         ping: async () => true,
@@ -55,11 +54,7 @@ describe('Auth (e2e)', () => {
       })
       .overrideProvider(RedisService)
       .useValue({
-        // Minimal in-memory ioredis stand-in covering the calls
-        // RefreshTokenService + the throttler stub make. Refresh token
-        // rotation is a state machine across two POSTs, so a no-op
-        // stub would let rotated tokens "still work" — use a real Map
-        // so the test catches actual rotation semantics.
+        // Real Map, not a no-op: rotation is stateful across two POSTs.
         client: (() => {
           const store = new Map<string, string>();
           return {
@@ -87,9 +82,7 @@ describe('Auth (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
-    // Register @fastify/cookie just like main.ts so the controller can read
-    // req.cookies and call reply.setCookie / clearCookie. Without it the
-    // cookie-based refresh flow 500s. Cast: see the note in main.ts.
+    // The cookie plugin is required or the refresh flow 500s; cast: see main.ts.
     await app.register(fastifyCookie as unknown as Parameters<typeof app.register>[0]);
     app.enableVersioning({ type: VersioningType.URI });
     await app.init();
@@ -100,7 +93,6 @@ describe('Auth (e2e)', () => {
     await app.close();
   });
 
-  /** Pull a Set-Cookie value out of a light-my-request response. */
   function getCookie(
     res: { cookies: Array<{ name: string; value: string }> },
     name: string,
@@ -119,9 +111,18 @@ describe('Auth (e2e)', () => {
       headers: { 'content-type': 'application/json' },
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { accessToken: string; user: { id: string } };
+    const body = res.json() as { accessToken: string; user: unknown };
+    expect(Object.keys(body).sort()).toEqual(['accessToken', 'user']);
     expect(typeof body.accessToken).toBe('string');
-    expect(body.user.id).toBe(storedUser.id);
+    expect(body.user).toEqual({
+      id: storedUser.id,
+      email: storedUser.email,
+      fullName: storedUser.fullName,
+      role: storedUser.role,
+    });
+    const payload = app.get(JwtService).decode(body.accessToken) as Record<string, unknown>;
+    expect(payload.sub).toBe(storedUser.id);
+    expect(payload).not.toHaveProperty('role');
   });
 
   it('POST /v1/auth/login returns 401 on bad password', async () => {
@@ -134,6 +135,16 @@ describe('Auth (e2e)', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it('POST /v1/auth/login returns 400 for an email longer than the signup limit', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: { email: `${'a'.repeat(244)}@example.com`, password: 'whatever' },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('GET /v1/auth/me returns 401 without a bearer token', async () => {
     const res = await app.inject({ method: 'GET', url: '/v1/auth/me' });
     expect(res.statusCode).toBe(401);
@@ -141,10 +152,7 @@ describe('Auth (e2e)', () => {
 
   it('GET /v1/auth/me returns the current user when the bearer is valid', async () => {
     const jwt = app.get(JwtService);
-    const token = await jwt.signAsync({
-      sub: storedUser.id,
-      role: storedUser.role,
-    });
+    const token = await jwt.signAsync({ sub: storedUser.id });
 
     const res = await app.inject({
       method: 'GET',
@@ -160,6 +168,18 @@ describe('Auth (e2e)', () => {
     });
   });
 
+  it('GET /v1/auth/me returns 401 for a token signed with the right secret but wrong audience', async () => {
+    const jwt = app.get(JwtService);
+    const token = await jwt.signAsync({ sub: storedUser.id }, { audience: 'someone-else' });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
   it('refresh flow: rotates the refresh token and rejects the old one', async () => {
     const login = await app.inject({
       method: 'POST',
@@ -170,8 +190,6 @@ describe('Auth (e2e)', () => {
       },
       headers: { 'content-type': 'application/json' },
     });
-    // The access token comes back in the body; the refresh token is set as an
-    // httpOnly cookie, never in the JSON body.
     const loginBody = login.json() as {
       accessToken: string;
       refreshToken?: string;
@@ -181,7 +199,6 @@ describe('Auth (e2e)', () => {
     const c0 = getCookie(login, 'refresh_token');
     expect(typeof c0).toBe('string');
 
-    // First rotation succeeds and issues a different refresh cookie.
     const r1 = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',
@@ -193,7 +210,6 @@ describe('Auth (e2e)', () => {
     expect(c1).not.toBe(c0);
     expect(typeof (r1.json() as { accessToken: string }).accessToken).toBe('string');
 
-    // Replaying the original cookie after rotation must be rejected.
     const replay = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',
@@ -222,7 +238,6 @@ describe('Auth (e2e)', () => {
     });
     expect(logout.statusCode).toBe(204);
 
-    // The same cookie can no longer be exchanged after logout revoked it.
     const refresh = await app.inject({
       method: 'POST',
       url: '/v1/auth/refresh',

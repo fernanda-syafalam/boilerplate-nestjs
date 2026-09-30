@@ -1,21 +1,32 @@
 import { z } from 'zod';
 
-/**
- * Environment variable schema. Single source of truth — every env var
- * the app reads must be declared here. Validation runs at startup so
- * the process fails fast on a misconfiguration instead of crashing on
- * the first request.
- *
- * Add new variables here as features land:
- *   DATABASE_URL  -> when Drizzle / pg is wired up
- *   REDIS_URL     -> when Redis / BullMQ is wired up
- *   JWT_SECRET    -> when auth is wired up
- *   LOG_LEVEL     -> when nestjs-pino is wired up
- *
- * See v2 Best Practices doc, Pilar 1 ("Konfigurasi dengan validasi
- * schema") for the broader pattern.
- */
-export const envSchema = z.object({
+function isHttpOrigin(value: string): boolean {
+  const parsed = URL.parse(value);
+  return (
+    parsed !== null &&
+    (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+    parsed.origin === value
+  );
+}
+
+const corsOrigins = z.string().transform((raw, ctx) => {
+  const origins = raw.split(',').map((o) => o.trim());
+  for (const origin of origins) {
+    if (origin === '' || origin.includes('*') || !isHttpOrigin(origin)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `CORS_ORIGINS entries must be exact origins (scheme://host[:port], no path, trailing slash, default port or wildcard), got "${origin}"`,
+      });
+      return z.NEVER;
+    }
+  }
+  return origins;
+});
+
+// Compose/k8s `${VAR:-}` yields '', which must mean "unset" as it did before zod parsing.
+const emptyAsUnset = (v: unknown) => (v === '' ? undefined : v);
+
+const envObject = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
 
@@ -27,12 +38,15 @@ export const envSchema = z.object({
   THROTTLER_TTL_MS: z.coerce.number().int().positive().default(60_000),
   THROTTLER_LIMIT: z.coerce.number().int().positive().default(100),
 
-  // 32+ char keeps brute-force out of reach. The schema rejects shorter
-  // values so a placeholder secret never leaks into production.
   JWT_SECRET: z.string().min(32),
-  JWT_EXPIRES_IN: z.string().default('15m'),
-  // Refresh tokens are opaque (not JWTs) and stored hashed in Redis;
-  // the value here controls Redis TTL.
+  // jsonwebtoken reads a bare numeric string as milliseconds, so only unit-suffixed durations pass.
+  JWT_EXPIRES_IN: z
+    .string()
+    .regex(/^[1-9]\d*[smhd]$/, "JWT_EXPIRES_IN must be a duration like '15m' (unit s, m, h or d)")
+    .default('15m'),
+  JWT_ISSUER: z.string().min(1).default('boilerplate-nestjs'),
+  JWT_AUDIENCE: z.string().min(1).default('boilerplate-nestjs'),
+  // Opaque token, not a JWT; this value is the Redis TTL.
   REFRESH_TOKEN_TTL_SECONDS: z.coerce
     .number()
     .int()
@@ -41,25 +55,49 @@ export const envSchema = z.object({
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 
-  // CORS — comma-separated list of allowed origins for the browser SPA.
-  // No wildcard is allowed when credentials:true (ADR-0002 / cookie model).
-  CORS_ORIGINS: z.string().default('http://localhost:5173'),
+  CORS_ORIGINS: corsOrigins.default(['http://localhost:5173']),
 
-  // Cookie settings for the httpOnly refresh_token cookie.
-  COOKIE_SECURE: z
-    .string()
-    .transform((v) => v === 'true' || v === '1')
-    .pipe(z.boolean())
-    .default(false),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
+
+  COOKIE_SECURE: z.preprocess(emptyAsUnset, z.stringbool().default(false)),
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
 
-  // OpenTelemetry. Endpoint absent -> SDK is a no-op (instrumentation
-  // still loads but spans / metrics are dropped) so engineers can run
-  // pnpm dev without a local collector.
-  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  // Parsed via otelEnvSchema by observability/tracing.ts before ConfigModule exists; unset endpoint = no export.
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.preprocess(emptyAsUnset, z.url().optional()),
   OTEL_SERVICE_NAME: z.string().min(1).default('boilerplate-nestjs'),
   SERVICE_VERSION: z.string().default('0.0.0'),
 });
+
+export const databaseEnvSchema = envObject.pick({ DATABASE_URL: true });
+export const otelEnvSchema = envObject.pick({
+  OTEL_EXPORTER_OTLP_ENDPOINT: true,
+  OTEL_SERVICE_NAME: true,
+  SERVICE_VERSION: true,
+});
+
+export const envSchema = envObject.superRefine((env, ctx) => {
+  if (env.NODE_ENV === 'production' && !env.COOKIE_SECURE) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['COOKIE_SECURE'],
+      message: 'COOKIE_SECURE must be true in production',
+    });
+  }
+  if (env.COOKIE_SAMESITE === 'none' && !env.COOKIE_SECURE) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['COOKIE_SECURE'],
+      message: 'COOKIE_SAMESITE=none requires COOKIE_SECURE=true',
+    });
+  }
+});
+
+let cachedEnv: Env | undefined;
+
+export function parseEnv(): Env {
+  cachedEnv ??= envSchema.parse(process.env);
+  return cachedEnv;
+}
 
 export type Env = z.infer<typeof envSchema>;

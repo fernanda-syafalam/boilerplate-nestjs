@@ -5,64 +5,37 @@ import { resourceFromAttributes } from '@opentelemetry/resources';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
+import { otelEnvSchema } from '../config/env.schema';
 
-/**
- * OpenTelemetry SDK bootstrap. MUST be imported as the very first
- * statement in `main.ts` (and any other entrypoint) — auto-
- * instrumentation patches modules at load time, so anything imported
- * before this file will not be instrumented.
- *
- * Env contract:
- *   OTEL_EXPORTER_OTLP_ENDPOINT   base URL of the OTLP/HTTP collector;
- *                                 omit to disable exporters (SDK runs
- *                                 as a no-op in that case so dev does
- *                                 not need a local collector)
- *   OTEL_SERVICE_NAME             service identifier in Tempo / Loki
- *   SERVICE_VERSION               commit SHA or semver from CI
- *
- * The values are read via process.env directly because this module
- * runs before NestFactory.create, before ConfigModule exists. The
- * env.schema.ts still validates them for the rest of the app.
- */
-const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-const serviceName = process.env.OTEL_SERVICE_NAME ?? 'boilerplate-nestjs';
-const serviceVersion = process.env.SERVICE_VERSION ?? '0.0.0';
+// Must be the first import; parses process.env directly because it runs before ConfigModule.
+const {
+  OTEL_EXPORTER_OTLP_ENDPOINT: otlpEndpoint,
+  OTEL_SERVICE_NAME: serviceName,
+  SERVICE_VERSION: serviceVersion,
+} = otelEnvSchema.parse(process.env);
 
 export const otelSdk = new NodeSDK({
   resource: resourceFromAttributes({
     [ATTR_SERVICE_NAME]: serviceName,
     [ATTR_SERVICE_VERSION]: serviceVersion,
   }),
-  traceExporter: otlpEndpoint
-    ? new OTLPTraceExporter({ url: `${otlpEndpoint}/v1/traces` })
-    : undefined,
-  metricReader: otlpEndpoint
-    ? new PeriodicExportingMetricReader({
-        exporter: new OTLPMetricExporter({ url: `${otlpEndpoint}/v1/metrics` }),
-        exportIntervalMillis: 15_000,
-      })
-    : undefined,
-  instrumentations: [
-    getNodeAutoInstrumentations({
-      // The fs instrumentation generates a span for every file system
-      // call — extremely noisy and rarely useful. Disable by default.
-      '@opentelemetry/instrumentation-fs': { enabled: false },
-      // Pino integration injects trace_id / span_id into every log
-      // line so Loki and Tempo can be cross-linked.
-      '@opentelemetry/instrumentation-pino': { enabled: true },
-    }),
-  ],
+  // Empty arrays (not undefined): sdk-node treats undefined as "configure from env" and defaults to OTLP on localhost.
+  ...(otlpEndpoint
+    ? {
+        traceExporter: new OTLPTraceExporter(),
+        metricReaders: [
+          new PeriodicExportingMetricReader({
+            exporter: new OTLPMetricExporter(),
+            exportIntervalMillis: 15_000,
+          }),
+        ],
+        // Logs keep the env-driven default (as before this gate) when an endpoint is set.
+      }
+    : { spanProcessors: [], metricReaders: [], logRecordProcessors: [] }),
+  instrumentations: [getNodeAutoInstrumentations()],
 });
 
-otelSdk.start();
-
-// Flush exporters before the process exits so spans buffered in memory
-// reach the collector.
-process.on('SIGTERM', () => {
-  otelSdk
-    .shutdown()
-    .catch(() => {
-      /* swallow — we are exiting anyway */
-    })
-    .finally(() => process.exit(0));
-});
+// Skipped under vitest: the SDK's resource detectors probe the network and stall app.close().
+if (process.env.NODE_ENV !== 'test') {
+  otelSdk.start();
+}

@@ -15,6 +15,13 @@
       "when": 1778143903791,
       "tag": "0001_warm_maggott",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790672835890,
+      "tag": "0002_lowercase_emails",
+      "breakpoints": true
     }
   ]
 }

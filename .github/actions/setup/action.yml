@@ -1,0 +1,13 @@
+name: Setup
+description: pnpm + Node (with pnpm cache) + frozen-lockfile install
+runs:
+  using: composite
+  steps:
+    # pnpm version comes from package.json's `packageManager`; do not set `version:` here.
+    - uses: pnpm/action-setup@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: pnpm
+    - run: pnpm install --frozen-lockfile
+      shell: bash

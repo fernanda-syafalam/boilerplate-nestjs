@@ -1,47 +1,46 @@
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
-import type { Job } from 'bullmq';
+import { type Job, UnrecoverableError } from 'bullmq';
+import { PinoLogger } from 'nestjs-pino';
+import {
+  type SendEmailRequest,
+  SendEmailRequestSchema,
+  describeIssues,
+} from './dto/send-email-request.dto';
 import { EMAIL_QUEUE } from './email.constants';
-import { EmailGateway } from './email.gateway';
-import type { SendEmailJob } from './email.service';
+import { EmailGateway, type SendEmailResult } from './email.gateway';
 
-/**
- * Worker for the `email` queue. Lives in the worker process
- * (entrypoint `dist/worker.js`); HTTP requests do not run this code.
- *
- * Concurrency 10 is a safe default for an email-shaped workload — IO
- * bound, no DB writes per job. Tune downwards if the gateway's rate
- * limit is tighter, or upwards once you measure the real bottleneck.
- */
+// IO-bound; tune concurrency to the gateway rate limit.
 @Processor(EMAIL_QUEUE, { concurrency: 10 })
 export class EmailProcessor extends WorkerHost {
-  private readonly logger = new Logger(EmailProcessor.name);
-
-  constructor(private readonly gateway: EmailGateway) {
+  constructor(
+    private readonly gateway: EmailGateway,
+    private readonly logger: PinoLogger,
+  ) {
     super();
+    this.logger.setContext(EmailProcessor.name);
   }
 
-  async process(job: Job<SendEmailJob>): Promise<{ messageId: string }> {
-    const result = await this.gateway.send({
-      to: job.data.to,
-      templateId: job.data.templateId,
-      variables: job.data.variables,
-    });
-    this.logger.log(
-      { jobId: job.id, idempotencyKey: job.data.idempotencyKey, messageId: result.messageId },
+  async process(job: Job<SendEmailRequest>): Promise<SendEmailResult> {
+    const parsed = SendEmailRequestSchema.safeParse(job.data);
+    if (!parsed.success) {
+      throw new UnrecoverableError(`invalid email job payload: ${describeIssues(parsed.error)}`);
+    }
+    const result = await this.gateway.send(parsed.data);
+    this.logger.info(
+      { jobId: job?.id, idempotencyKey: parsed.data.idempotencyKey, messageId: result.messageId },
       'email sent',
     );
     return result;
   }
 
   @OnWorkerEvent('failed')
-  onFailed(job: Job<SendEmailJob>, err: Error): void {
+  onFailed(job: Job<SendEmailRequest> | undefined, err: Error): void {
     this.logger.error(
       {
-        jobId: job.id,
-        attemptsMade: job.attemptsMade,
-        idempotencyKey: job.data.idempotencyKey,
-        err: err.message,
+        jobId: job?.id,
+        attemptsMade: job?.attemptsMade,
+        idempotencyKey: job?.data?.idempotencyKey,
+        err,
       },
       'email job failed',
     );

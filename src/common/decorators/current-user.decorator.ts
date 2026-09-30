@@ -1,17 +1,7 @@
 import { type ExecutionContext, createParamDecorator } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
+import type { AuthUser } from '../types/auth-user';
 
-export interface AuthUser {
-  id: string;
-  email: string;
-  fullName: string;
-  role: 'admin' | 'staff' | 'customer';
-}
-
-/**
- * Pulls the AuthUser that JwtStrategy.validate placed on the request.
- * `req.user` is set by Passport during the JwtAuthGuard pass.
- */
 export const CurrentUser = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): AuthUser => {
     const req = ctx.switchToHttp().getRequest<FastifyRequest & { user: AuthUser }>();

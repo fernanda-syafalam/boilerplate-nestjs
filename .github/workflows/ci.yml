@@ -5,13 +5,9 @@ on:
     branches: [main]
   pull_request:
 
-# Cancel superseded runs of the same ref to save runner minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
-env:
-  NODE_VERSION: '22'
 
 jobs:
   static:
@@ -21,19 +17,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # pnpm version comes from package.json's `packageManager` field —
-      # do not set `version:` here, the action would then complain about
-      # a duplicate spec.
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       - run: pnpm typecheck
+      - run: pnpm db:check
       - run: pnpm lint:ci
       - run: pnpm build
 
@@ -44,17 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # pnpm version comes from package.json's `packageManager` field —
-      # do not set `version:` here, the action would then complain about
-      # a duplicate spec.
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       - name: Run unit + e2e tests
         run: pnpm test:cov
@@ -74,18 +51,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # pnpm version comes from package.json's `packageManager` field —
-      # do not set `version:` here, the action would then complain about
-      # a duplicate spec.
-      - uses: pnpm/action-setup@v4
+      - uses: ./.github/actions/setup
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      # Testcontainers spawns its own Postgres via the Docker daemon
-      # that ubuntu-latest provides out of the box.
       - run: pnpm test:int

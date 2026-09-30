@@ -1,38 +1,25 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { AppConfig } from '../../config/configuration';
+import { PinoLogger } from 'nestjs-pino';
+import { z } from 'zod';
+import type { AppConfigService } from '../../config';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 
-interface StoredRefreshToken {
-  userId: string;
-}
+type RejectReason = 'unknown_or_reused' | 'corrupt_json' | 'invalid_payload';
+
+// Sentinel so unparseable data stays distinct from a legitimately parsed JSON value.
+const CORRUPT = Symbol('corrupt');
+
+const StoredRefreshTokenSchema = z.object({ userId: z.uuid() });
 
 export interface MintedRefreshToken {
-  token: string; // raw token returned to the client
+  token: string;
   expiresInSeconds: number;
 }
 
 /**
- * Opaque refresh tokens with single-use rotation. The raw token is
- * never stored — Redis holds only sha256(rawToken) as the key, so a
- * leaked Redis dump cannot be used to log in.
- *
- * Rotation pattern (each `/v1/auth/refresh` call):
- *   1. Lookup current token by its hash and atomically delete it
- *      (Redis GETDEL — atomic so a concurrent retry cannot both
- *      succeed and produce two valid descendants).
- *   2. If lookup misses, the token is unknown OR already rotated.
- *      Respond 401 either way.
- *   3. Mint a fresh refresh token, return it to the client.
- *
- * Out of scope for the boilerplate (left as follow-up for services
- * that need higher assurance):
- *   - Token "family" theft detection: when a stolen token is replayed
- *     after the legitimate user has already rotated it, the entire
- *     family is revoked. Implementation requires either reverse
- *     lookup or per-family Redis set — track issue if a service
- *     needs it.
+ * Opaque single-use tokens; Redis stores only sha256. No token-family theft detection.
  */
 @Injectable()
 export class RefreshTokenService {
@@ -40,46 +27,55 @@ export class RefreshTokenService {
 
   constructor(
     private readonly redis: RedisService,
-    private readonly config: ConfigService<{ app: AppConfig }, true>,
-  ) {}
+    @Inject(ConfigService) private readonly config: AppConfigService,
+    private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(RefreshTokenService.name);
+  }
 
-  /**
-   * Issue a brand-new refresh token bound to `userId`. Used by login.
-   */
   async mint(userId: string): Promise<MintedRefreshToken> {
     const raw = randomBytes(32).toString('base64url');
     const key = this.redisKey(raw);
-    const payload: StoredRefreshToken = { userId };
+    const payload: z.infer<typeof StoredRefreshTokenSchema> = { userId };
     const expiresInSeconds = this.ttlSeconds();
     await this.redis.client.set(key, JSON.stringify(payload), 'EX', expiresInSeconds);
     return { token: raw, expiresInSeconds };
   }
 
-  /**
-   * Trade an unused refresh token for a new one. Throws
-   * UnauthorizedException for unknown / already-rotated / expired
-   * tokens.
-   */
-  async rotate(rawToken: string): Promise<{ userId: string; refresh: MintedRefreshToken }> {
-    const key = this.redisKey(rawToken);
-    // GETDEL is atomic in Redis 6.2+, so a concurrent rotation race
-    // returns the value to exactly one caller; everyone else sees
-    // null and is rejected.
-    const stored = await this.redis.client.getdel(key);
+  /** Single-use: GETDEL is atomic, so concurrent consumers yield one winner. */
+  async consume(rawToken: string): Promise<string> {
+    const stored = await this.redis.client.getdel(this.redisKey(rawToken));
     if (!stored) {
-      throw new UnauthorizedException('invalid refresh token');
+      // Reuse of a single-use token looks the same as an unknown one, and is the signal to watch.
+      return this.reject('unknown_or_reused');
     }
-    const { userId } = JSON.parse(stored) as StoredRefreshToken;
-    const refresh = await this.mint(userId);
-    return { userId, refresh };
+    const json = this.parseJson(stored);
+    if (json === CORRUPT) {
+      return this.reject('corrupt_json');
+    }
+    const parsed = StoredRefreshTokenSchema.safeParse(json);
+    if (!parsed.success) {
+      return this.reject('invalid_payload');
+    }
+    return parsed.data.userId;
   }
 
-  /**
-   * Best-effort logout — invalidate a specific refresh token. Safe to
-   * call with an unknown token; returns silently.
-   */
   async revoke(rawToken: string): Promise<void> {
     await this.redis.client.del(this.redisKey(rawToken));
+  }
+
+  private reject(reason: RejectReason): never {
+    // Never log the token or stored value: both are credentials.
+    this.logger.warn({ reason }, 'refresh rejected');
+    throw new UnauthorizedException('invalid refresh token');
+  }
+
+  private parseJson(raw: string): unknown {
+    try {
+      return JSON.parse(raw);
+    } catch (_err) {
+      return CORRUPT;
+    }
   }
 
   private redisKey(rawToken: string): string {
