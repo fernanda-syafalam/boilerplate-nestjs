@@ -12,7 +12,7 @@ Totals: 44 items — 3 major, 41 minor (47 raw findings with 5 duplicates merged
 | ID | Area | Finding | Location | Fix | Status |
 |---|---|---|---|---|---|
 | M1 | auth, users | Email canonicalisation (`trim().toLowerCase().pipe(z.email())`) copied in signup and login and already drifting (`max(255)` only on signup) — a drift locks registered users out | `src/modules/auth/dto/login.dto.ts:6`, `src/modules/users/dto/create-user.dto.ts:7` | One `EmailSchema` in `src/common/`, used by both DTOs | Fixed (1029b51) |
-| M2 | infrastructure | `PasswordHasher.verify` swallows every argon2 error as `false`; a native failure or corrupt stored hash looks like a wrong password, with no log | `src/infrastructure/security/password-hasher.ts:26` | Catch only hash-format errors, rethrow the rest, inject `PinoLogger` and log corrupt hashes | Open |
+| M2 | infrastructure | `PasswordHasher.verify` swallows every argon2 error as `false`; a native failure or corrupt stored hash looks like a wrong password, with no log | `src/infrastructure/security/password-hasher.ts:26` | Catch only hash-format errors, rethrow the rest, inject `PinoLogger` and log corrupt hashes | Fixed (476b25b) |
 | M3 | infrastructure | Integration test applies a hand-written copy of the `users` DDL (third copy of the schema); the stated reason "bypasses drizzle-kit" no longer holds | `src/modules/users/users.repository.int-spec.ts:22-35` | Run drizzle `migrate()` from `drizzle/` in `beforeAll` | Open |
 
 ## Minor
