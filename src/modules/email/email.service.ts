@@ -1,8 +1,12 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
+import {
+  type SendEmailRequest,
+  SendEmailRequestSchema,
+  describeIssues,
+} from './dto/send-email-request.dto';
 import { EMAIL_QUEUE } from './email.constants';
-import { type SendEmailRequest, SendEmailRequestSchema, describeIssues } from './email.gateway';
 
 @Injectable()
 export class EmailService {

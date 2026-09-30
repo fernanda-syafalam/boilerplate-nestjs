@@ -1,21 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
-import { z } from 'zod';
-
-export const SendEmailRequestSchema = z.object({
-  to: z.email(),
-  templateId: z.string().min(1),
-  variables: z.record(z.string(), z.string()),
-  idempotencyKey: z.string().min(1),
-});
-
-export type SendEmailRequest = z.infer<typeof SendEmailRequestSchema>;
-
-/** Paths and codes only: issue messages/values may echo the recipient address. */
-export function describeIssues(error: z.ZodError): string {
-  return error.issues.map((i) => `${i.path.join('.') || '(root)'}:${i.code}`).join(', ');
-}
+import type { SendEmailRequest } from './dto/send-email-request.dto';
 
 export interface SendEmailResult {
   messageId: string;

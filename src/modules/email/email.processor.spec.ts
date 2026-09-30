@@ -1,7 +1,8 @@
 import { type Job, UnrecoverableError } from 'bullmq';
 import type { PinoLogger } from 'nestjs-pino';
 import { describe, expect, it, vi } from 'vitest';
-import { EmailGateway, type SendEmailRequest } from './email.gateway';
+import type { SendEmailRequest } from './dto/send-email-request.dto';
+import { EmailGateway } from './email.gateway';
 import { EmailProcessor } from './email.processor';
 
 function fakeJob(data: unknown): Job<SendEmailRequest> {

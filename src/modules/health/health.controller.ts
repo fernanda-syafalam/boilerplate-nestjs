@@ -1,30 +1,21 @@
 import { Controller, Get, HttpCode, HttpStatus, ServiceUnavailableException } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
-import { DrizzleService } from '../../infrastructure/database/drizzle.service';
-import { RedisService } from '../../infrastructure/redis/redis.service';
+import { HealthService, type ReadyChecks } from './health.service';
 
 interface LivenessStatus {
   status: 'ok';
 }
 
-type DependencyState = 'ok' | 'down';
-
 interface ReadinessStatus {
   status: 'ok';
-  checks: {
-    database: DependencyState;
-    redis: DependencyState;
-  };
+  checks: ReadyChecks;
 }
 
 /** Liveness is dependency-free so a slow DB does not restart every pod; readiness pings dependencies. */
 @Public()
 @Controller()
 export class HealthController {
-  constructor(
-    private readonly drizzle: DrizzleService,
-    private readonly redis: RedisService,
-  ) {}
+  constructor(private readonly health: HealthService) {}
 
   @Get('healthz')
   @HttpCode(HttpStatus.OK)
@@ -35,20 +26,11 @@ export class HealthController {
   @Get('readyz')
   @HttpCode(HttpStatus.OK)
   async readiness(): Promise<ReadinessStatus> {
-    const [databaseOk, redisOk] = await Promise.all([this.drizzle.ping(), this.redis.ping()]);
-
-    if (!databaseOk || !redisOk) {
-      throw new ServiceUnavailableException({
-        checks: {
-          database: databaseOk ? 'ok' : 'down',
-          redis: redisOk ? 'ok' : 'down',
-        },
-      });
+    const result = await this.health.checkReadiness();
+    if (!result.ready) {
+      // Body is `{ checks }` only: the filter allowlists `checks` and `status` is a reserved member.
+      throw new ServiceUnavailableException({ checks: result.checks });
     }
-
-    return {
-      status: 'ok',
-      checks: { database: 'ok', redis: 'ok' },
-    };
+    return { status: 'ok', checks: result.checks };
   }
 }
