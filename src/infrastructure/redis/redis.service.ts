@@ -26,10 +26,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.client.quit().catch(() => {
-      // quit can race in-flight commands; force-close.
+    try {
+      await this.client.quit();
+    } catch (err) {
+      // quit can race in-flight commands; force-close and keep the cause visible.
+      this.logger.warn({ err }, 'redis quit failed, forcing disconnect');
       this.client.disconnect();
-    });
+      return;
+    }
     this.logger.info('redis client closed');
   }
 

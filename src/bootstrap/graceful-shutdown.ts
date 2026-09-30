@@ -7,13 +7,14 @@ const SIGNALS: NodeJS.Signals[] = ['SIGTERM', 'SIGINT'];
 /** Closes Nest first (drains HTTP and workers), then flushes telemetry, so drain-time spans are exported. */
 export function registerGracefulShutdown(
   app: INestApplicationContext,
-  logger: Pick<PinoLogger, 'error' | 'warn'>,
+  logger: Pick<PinoLogger, 'info' | 'error' | 'warn'>,
 ): void {
   let shuttingDown = false;
 
-  const shutdown = async (): Promise<void> => {
+  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
+    logger.info({ signal }, 'shutting down');
     let exitCode = 0;
     try {
       await app.close();
@@ -31,6 +32,6 @@ export function registerGracefulShutdown(
   };
 
   for (const signal of SIGNALS) {
-    process.once(signal, () => void shutdown());
+    process.once(signal, () => void shutdown(signal));
   }
 }
