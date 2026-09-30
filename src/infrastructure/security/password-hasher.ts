@@ -3,7 +3,7 @@ import * as argon2 from 'argon2';
 import { PinoLogger } from 'nestjs-pino';
 
 /** OWASP argon2id params; retune so one hash takes 250-500 ms. */
-export const ARGON2_OPTIONS: argon2.Options = {
+const ARGON2_OPTIONS: argon2.Options = {
   type: argon2.argon2id,
   memoryCost: 19_456,
   timeCost: 2,
@@ -20,7 +20,7 @@ export class PasswordHasher implements OnModuleInit {
 
   /** Eager, so the first unknown-email login isn't slower than later ones. */
   async onModuleInit(): Promise<void> {
-    this.dummyHash = await this.hash('dummy-password-for-timing');
+    await this.ensureDummyHash();
   }
 
   hash(plain: string): Promise<string> {
@@ -41,7 +41,11 @@ export class PasswordHasher implements OnModuleInit {
 
   /** Burns a real verify so a missing user costs the same as a wrong password. */
   async verifyDummy(plain: string): Promise<void> {
+    await this.verify(await this.ensureDummyHash(), plain);
+  }
+
+  private async ensureDummyHash(): Promise<string> {
     this.dummyHash ??= await this.hash('dummy-password-for-timing');
-    await this.verify(this.dummyHash, plain);
+    return this.dummyHash;
   }
 }

@@ -19,22 +19,14 @@ export const otelSdk = new NodeSDK({
     [ATTR_SERVICE_NAME]: serviceName,
     [ATTR_SERVICE_VERSION]: serviceVersion,
   }),
-  traceExporter: otlpEndpoint
-    ? new OTLPTraceExporter({ url: `${otlpEndpoint}/v1/traces` })
-    : undefined,
+  traceExporter: otlpEndpoint ? new OTLPTraceExporter() : undefined,
   metricReader: otlpEndpoint
     ? new PeriodicExportingMetricReader({
-        exporter: new OTLPMetricExporter({ url: `${otlpEndpoint}/v1/metrics` }),
+        exporter: new OTLPMetricExporter(),
         exportIntervalMillis: 15_000,
       })
     : undefined,
-  instrumentations: [
-    getNodeAutoInstrumentations({
-      // Noisy.
-      '@opentelemetry/instrumentation-fs': { enabled: false },
-      '@opentelemetry/instrumentation-pino': { enabled: true },
-    }),
-  ],
+  instrumentations: [getNodeAutoInstrumentations()],
 });
 
 // Skipped under vitest: the SDK's resource detectors probe the network and stall app.close().

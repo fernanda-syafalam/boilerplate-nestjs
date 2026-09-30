@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { and, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../infrastructure/database/drizzle.service';
 import { type NewUser, type User, users } from '../../infrastructure/database/schema/users.schema';
-import type { CursorPayload } from './users.cursor';
 
 @Injectable()
 export class UsersRepository {
@@ -42,13 +41,13 @@ export class UsersRepository {
 
   /** The (createdAt, id) tie-break keeps order stable. */
   async listPage(
-    cursor: CursorPayload | undefined,
+    cursor: { id: string; createdAt: Date } | undefined,
     limit: number,
   ): Promise<{ items: User[]; hasMore: boolean }> {
     const cursorPredicate = cursor
       ? or(
-          lt(users.createdAt, new Date(cursor.createdAt)),
-          and(eq(users.createdAt, new Date(cursor.createdAt)), lt(users.id, cursor.id)),
+          lt(users.createdAt, cursor.createdAt),
+          and(eq(users.createdAt, cursor.createdAt), lt(users.id, cursor.id)),
         )
       : undefined;
 

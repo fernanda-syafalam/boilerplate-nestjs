@@ -1,19 +1,18 @@
 import { resolve } from 'node:path';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { type NodePgDatabase, drizzle } from 'drizzle-orm/node-postgres';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { DrizzleService } from '../../infrastructure/database/drizzle.service';
+import { type Db, DrizzleService } from '../../infrastructure/database/drizzle.service';
 import * as schema from '../../infrastructure/database/schema';
 import { type NewUser, users } from '../../infrastructure/database/schema/users.schema';
-import { decodeCursor, encodeCursor } from './users.cursor';
 import { UsersRepository } from './users.repository';
 
 describe('UsersRepository (integration)', () => {
   let container: StartedPostgreSqlContainer;
   let pool: Pool;
-  let db: NodePgDatabase<typeof schema>;
+  let db: Db;
   let repo: UsersRepository;
 
   beforeAll(async () => {
@@ -96,20 +95,14 @@ describe('UsersRepository (integration)', () => {
     expect(page1.hasMore).toBe(true);
 
     const last1 = page1.items[1];
-    const page2 = await repo.listPage(
-      decodeCursor(last1 ? encodeCursor(last1) : '') ?? undefined,
-      2,
-    );
+    const page2 = await repo.listPage(last1, 2);
     expect(page2.items).toHaveLength(2);
 
     const page1Ids = new Set(page1.items.map((u) => u.id));
     expect(page2.items.every((u) => !page1Ids.has(u.id))).toBe(true);
 
     const last2 = page2.items[1];
-    const page3 = await repo.listPage(
-      decodeCursor(last2 ? encodeCursor(last2) : '') ?? undefined,
-      2,
-    );
+    const page3 = await repo.listPage(last2, 2);
     expect(page3.items).toHaveLength(1);
     expect(page3.hasMore).toBe(false);
   });

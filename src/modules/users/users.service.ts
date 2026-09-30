@@ -53,7 +53,10 @@ export class UsersService {
   }
 
   async list(cursor: CursorPayload | undefined, limit: number): Promise<CursorPage<User>> {
-    const { items, hasMore } = await this.repo.listPage(cursor, limit);
+    const { items, hasMore } = await this.repo.listPage(
+      cursor && { id: cursor.id, createdAt: new Date(cursor.createdAt) },
+      limit,
+    );
     const last = items[items.length - 1];
     return { items, nextCursor: hasMore && last ? encodeCursor(last) : null };
   }
