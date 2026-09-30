@@ -1,5 +1,7 @@
+import { resolve } from 'node:path';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { type NodePgDatabase, drizzle } from 'drizzle-orm/node-postgres';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DrizzleService } from '../../infrastructure/database/drizzle.service';
@@ -19,21 +21,8 @@ describe('UsersRepository (integration)', () => {
     pool = new Pool({ connectionString: container.getConnectionUri() });
     db = drizzle(pool, { schema });
 
-    // Bypasses drizzle-kit, so the schema is applied by hand.
-    await db.execute(`
-      CREATE TYPE user_role AS ENUM ('admin', 'staff', 'customer');
-      CREATE TABLE users (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        email varchar(255) NOT NULL UNIQUE,
-        full_name varchar(120) NOT NULL,
-        password_hash varchar(255) NOT NULL,
-        role user_role NOT NULL DEFAULT 'customer',
-        created_at timestamptz(3) NOT NULL DEFAULT now(),
-        updated_at timestamptz(3) NOT NULL DEFAULT now(),
-        deleted_at timestamptz(3)
-      );
-      CREATE INDEX users_created_at_id_idx ON users (created_at, id);
-    `);
+    // The committed migrations, so this test also catches drift between them and the schema.
+    await migrate(db, { migrationsFolder: resolve(__dirname, '../../../drizzle') });
 
     const drizzleStub = { db } as Pick<DrizzleService, 'db'>;
     repo = new UsersRepository(drizzleStub as DrizzleService);
