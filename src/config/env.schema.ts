@@ -15,13 +15,16 @@ const corsOrigins = z.string().transform((raw, ctx) => {
     if (origin === '' || origin.includes('*') || !isHttpOrigin(origin)) {
       ctx.addIssue({
         code: 'custom',
-        message: `CORS_ORIGINS entries must be non-empty http(s) origins without wildcards, got "${origin}"`,
+        message: `CORS_ORIGINS entries must be exact origins (scheme://host[:port], no path, trailing slash, default port or wildcard), got "${origin}"`,
       });
       return z.NEVER;
     }
   }
   return origins;
 });
+
+// Compose/k8s `${VAR:-}` yields '', which must mean "unset" as it did before zod parsing.
+const emptyAsUnset = (v: unknown) => (v === '' ? undefined : v);
 
 const envObject = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -56,12 +59,12 @@ const envObject = z.object({
 
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
 
-  COOKIE_SECURE: z.stringbool().default(false),
+  COOKIE_SECURE: z.preprocess(emptyAsUnset, z.stringbool().default(false)),
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
 
   // Parsed via otelEnvSchema by observability/tracing.ts before ConfigModule exists; unset endpoint = no export.
-  OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional(),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.preprocess(emptyAsUnset, z.url().optional()),
   OTEL_SERVICE_NAME: z.string().min(1).default('boilerplate-nestjs'),
   SERVICE_VERSION: z.string().default('0.0.0'),
 });

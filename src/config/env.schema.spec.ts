@@ -107,4 +107,11 @@ describe('otelEnvSchema', () => {
     ).toBe('http://collector:4318');
     expect(otelEnvSchema.safeParse({ OTEL_EXPORTER_OTLP_ENDPOINT: 'nope' }).success).toBe(false);
   });
+
+  it('treats an empty COOKIE_SECURE or OTEL endpoint as unset', () => {
+    expect(envSchema.parse({ ...base, COOKIE_SECURE: '' }).COOKIE_SECURE).toBe(false);
+    expect(
+      otelEnvSchema.parse({ OTEL_EXPORTER_OTLP_ENDPOINT: '' }).OTEL_EXPORTER_OTLP_ENDPOINT,
+    ).toBeUndefined();
+  });
 });
