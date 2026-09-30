@@ -88,20 +88,20 @@ Totals: 44 items — 3 major, 41 minor (47 raw findings with 5 duplicates merged
 
 | ID | Finding | Location | Fix | Status |
 |---|---|---|---|---|
-| B1 | Shutdown imports the concrete `otelSdk` singleton while `app`/`logger` are injected; importing it constructs `NodeSDK` and makes the order untestable (also: observability) | `src/bootstrap/graceful-shutdown.ts:3,25` | Take `flushTelemetry: () => Promise<void>` from `main.ts`/`worker.ts` | Open |
-| B2 | No spec for close→flush order, double-signal guard, exit codes | `src/bootstrap/graceful-shutdown.ts:14-31` | `graceful-shutdown.spec.ts` with fakes + `process.exit` spy | Open |
+| B1 | Shutdown imports the concrete `otelSdk` singleton while `app`/`logger` are injected; importing it constructs `NodeSDK` and makes the order untestable (also: observability) | `src/bootstrap/graceful-shutdown.ts:3,25` | Take `flushTelemetry: () => Promise<void>` from `main.ts`/`worker.ts` | Fixed (56c02e6) |
+| B2 | No spec for close→flush order, double-signal guard, exit codes | `src/bootstrap/graceful-shutdown.ts:14-31` | `graceful-shutdown.spec.ts` with fakes + `process.exit` spy | Fixed (56c02e6, 0fda999) |
 | B3 | No log when shutdown starts or which signal triggered it | `src/bootstrap/graceful-shutdown.ts:10,14-16` | Widen logger to `info`; log `shutting down` with `signal` | Fixed (c67f5f9) |
-| B4 | v2 doc still prescribes `enableShutdownHooks()` and a separate OTel SIGTERM handler; the pivot is recorded only in one CLAUDE.md line | `docs/Backend-Best-Practices-NestJS-v2.md:202,336,1836,2197,2544,2611` | ADR "custom graceful shutdown" + update the doc | Open |
+| B4 | v2 doc still prescribes `enableShutdownHooks()` and a separate OTel SIGTERM handler; the pivot is recorded only in one CLAUDE.md line | `docs/Backend-Best-Practices-NestJS-v2.md:202,336,1836,2197,2544,2611` | ADR "custom graceful shutdown" + update the doc | Fixed (7e0bcdd, 69fe158) |
 | O1 | OTLP URLs assembled by hand (`//v1/...` on trailing slash, per-signal env overrides ignored) | `src/observability/tracing.ts:20,24` | Construct exporters without `url`; the library resolves it | Fixed (a0bf1f8) |
 | O2 | `instrumentation-fs: false` / `instrumentation-pino: true` restate defaults and block env toggles | `src/observability/tracing.ts:31-32` | Remove both entries | Fixed (a0bf1f8) |
-| O3 | API and worker share one `OTEL_SERVICE_NAME` (same ConfigMap) — spans indistinguishable | `k8s/deployment.yaml:43`, `k8s/worker-deployment.yaml:32` | Per-Deployment `OTEL_SERVICE_NAME` (`-api`, `-worker`) | Open |
+| O3 | API and worker share one `OTEL_SERVICE_NAME` (same ConfigMap) — spans indistinguishable | `k8s/deployment.yaml:43`, `k8s/worker-deployment.yaml:32` | Per-Deployment `OTEL_SERVICE_NAME` (`-api`, `-worker`) | Fixed (7e0bcdd) |
 
 ## Documentation drift found during the review
 
 | ID | Finding | Location | Fix | Status |
 |---|---|---|---|---|
-| D1 | Pilar 7 example still uses `order-confirm:${orderId}` (BullMQ rejects `:`) | `docs/Backend-Best-Practices-NestJS-v2.md` (Pilar 7, `EmailService`) | Use `order-confirm-${orderId}` | Open |
-| D2 | "Readiness `/readyz` pings Postgres" — it also pings Redis | `k8s/README.md:49` | Mention Redis | Open |
+| D1 | Pilar 7 example still uses `order-confirm:${orderId}` (BullMQ rejects `:`) | `docs/Backend-Best-Practices-NestJS-v2.md` (Pilar 7, `EmailService`) | Use `order-confirm-${orderId}` | Fixed (7e0bcdd) |
+| D2 | "Readiness `/readyz` pings Postgres" — it also pings Redis | `k8s/README.md:49` | Mention Redis | Fixed (7e0bcdd) |
 
 ## Suggested order
 
