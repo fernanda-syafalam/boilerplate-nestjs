@@ -21,19 +21,19 @@ Totals: 44 items — 3 major, 41 minor (47 raw findings with 5 duplicates merged
 
 | ID | Finding | Location | Fix | Status |
 |---|---|---|---|---|
-| A1 | Authenticated-user shape defined three times (`AuthUser` interface, `AuthUserSchema`, `UserResponseSchema` fields); `AuthUser` vs `AuthUserBody` are two types for one thing (also: common) | `src/common/types/auth-user.ts:3-8`, `src/modules/auth/dto/auth-response.dto.ts:5-10` | One zod schema in `src/common/types`, `AuthUser = z.infer<…>` | Open |
+| A1 | Authenticated-user shape defined three times (`AuthUser` interface, `AuthUserSchema`, `UserResponseSchema` fields); `AuthUser` vs `AuthUserBody` are two types for one thing (also: common) | `src/common/types/auth-user.ts:3-8`, `src/modules/auth/dto/auth-response.dto.ts:5-10` | One zod schema in `src/common/types`, `AuthUser = z.infer<…>` | Fixed (83bd2ed) |
 | A2 | `parseJson` swallows `JSON.parse` errors; corrupt Redis data is indistinguishable from an unknown token and leaves no trace | `src/modules/auth/refresh-token.service.ts:53-58` | Log the corrupt case before the 401 | Fixed (f3f89f1) |
 | A3 | Rejected / reused refresh tokens are not logged (reuse of a single-use token is the signal that matters) | `src/modules/auth/refresh-token.service.ts:39-45` | Inject `PinoLogger`, log `refresh rejected` with `reason`, never the token | Fixed (f3f89f1) |
-| A4 | `COOKIE_PATH = '/v1/auth'` duplicates the controller route; changing version/path silently breaks the cookie scope | `src/modules/auth/auth.controller.ts:29,31` | Derive both from one constant | Open |
-| A5 | "Set refresh cookie + map to response" duplicated in `login` and `refresh` | `src/modules/auth/auth.controller.ts:44-45,62-63` | One private `respond(reply, result)` | Open |
-| A6 | Hand-written `CookieRequest` type; `@fastify/cookie` already augments `FastifyRequest` | `src/modules/auth/auth.controller.ts:26` | Use `FastifyRequest` directly | Open |
+| A4 | `COOKIE_PATH = '/v1/auth'` duplicates the controller route; changing version/path silently breaks the cookie scope | `src/modules/auth/auth.controller.ts:29,31` | Derive both from one constant | Fixed (83bd2ed) |
+| A5 | "Set refresh cookie + map to response" duplicated in `login` and `refresh` | `src/modules/auth/auth.controller.ts:44-45,62-63` | One private `respond(reply, result)` | Fixed (83bd2ed) |
+| A6 | Hand-written `CookieRequest` type; `@fastify/cookie` already augments `FastifyRequest` | `src/modules/auth/auth.controller.ts:26` | Use `FastifyRequest` directly | Fixed (83bd2ed) |
 
 ### users
 
 | ID | Finding | Location | Fix | Status |
 |---|---|---|---|---|
-| U1 | Repository takes the wire-format `CursorPayload` (ISO string) and converts to `Date` itself | `src/modules/users/users.repository.ts:5,50-51` | `listPage` takes `{ id; createdAt: Date }`; convert in the DTO/service | Open |
-| U2 | `UsersService` spec re-tests argon2 directly, duplicating `PasswordHasher`'s own spec | `src/modules/users/users.service.spec.ts:126-142` | Drop the block; assert `hasher.hash` output reaches `repo.create` | Open |
+| U1 | Repository takes the wire-format `CursorPayload` (ISO string) and converts to `Date` itself | `src/modules/users/users.repository.ts:5,50-51` | `listPage` takes `{ id; createdAt: Date }`; convert in the DTO/service | Fixed (a0bf1f8, 73f22f4) |
+| U2 | `UsersService` spec re-tests argon2 directly, duplicating `PasswordHasher`'s own spec | `src/modules/users/users.service.spec.ts:126-142` | Drop the block; assert `hasher.hash` output reaches `repo.create` | Fixed (a0bf1f8) |
 
 ### email
 
@@ -43,8 +43,8 @@ Totals: 44 items — 3 major, 41 minor (47 raw findings with 5 duplicates merged
 | E2 | `EmailGateway` always bound to `LoggingEmailGateway`; a production worker marks jobs done without sending | `src/modules/email/email-worker.module.ts:10` | Select adapter via config; refuse the logging adapter in production | Fixed (5ed9cc6) |
 | E3 | Zod issues dropped when rejecting a malformed job — the only trace of a non-retried job | `src/modules/email/email.processor.ts:20-21` | Include issue paths (not values) in the error/log | Fixed (5ed9cc6) |
 | E4 | `onFailed` logs `err.message` only; stack and type lost | `src/modules/email/email.processor.ts:38` | Log `{ err }` like the rest of the repo | Fixed (5ed9cc6) |
-| E5 | Job payload schema (API→worker contract) lives in the worker-side gateway file | `src/modules/email/email.gateway.ts:6-13` | Move to `src/modules/email/dto/` | Open |
-| E6 | Result type `{ messageId: string }` re-declared | `src/modules/email/email.processor.ts:18` | Use `SendEmailResult` | Open |
+| E5 | Job payload schema (API→worker contract) lives in the worker-side gateway file | `src/modules/email/email.gateway.ts:6-13` | Move to `src/modules/email/dto/` | Fixed (09ef193) |
+| E6 | Result type `{ messageId: string }` re-declared | `src/modules/email/email.processor.ts:18` | Use `SendEmailResult` | Fixed (09ef193) |
 
 ### health
 
@@ -52,24 +52,24 @@ Totals: 44 items — 3 major, 41 minor (47 raw findings with 5 duplicates merged
 |---|---|---|---|---|
 | H1 | 503 body sets `status: 'degraded'`, which the filter strips (reserved member) — a dead contract; 503 shape untested | `src/modules/health/health.controller.ts:42` | Send `{ checks }` only; add a 503 e2e case | Fixed (af48574) |
 | H2 | Expected "not ready" is thrown as a 5xx, so the filter logs `error` on every probe while a dependency is down (~12/min/pod) | `src/modules/health/health.controller.ts:41`, `src/common/filters/all-exceptions.filter.ts:80` | Don't log expected 503s as errors (filter) or return readiness without an exception | Fixed (af48574) |
-| H3 | `ReadinessStatus` allows `status: 'ok'` with a `'down'` check; failure body untyped | `src/modules/health/health.controller.ts:10-18,41-47` | Success checks typed `'ok'`; typed failure body | Open |
-| H4 | Readiness aggregation (business rule) lives in the controller | `src/modules/health/health.controller.ts:38-53` | `HealthService` returns a state union; controller maps to 200/503 | Open |
+| H3 | `ReadinessStatus` allows `status: 'ok'` with a `'down'` check; failure body untyped | `src/modules/health/health.controller.ts:10-18,41-47` | Success checks typed `'ok'`; typed failure body | Fixed (09ef193) |
+| H4 | Readiness aggregation (business rule) lives in the controller | `src/modules/health/health.controller.ts:38-53` | `HealthService` returns a state union; controller maps to 200/503 | Fixed (09ef193) |
 
 ### common
 
 | ID | Finding | Location | Fix | Status |
 |---|---|---|---|---|
 | C1 | Raw `ZodError` branch returns `flatten()` + "Validation Failed" while the global pipe returns `issues` + "Validation failed" — two shapes for one error | `src/common/filters/all-exceptions.filter.ts:55-58` | Emit the same shape as the pipe path | Fixed (af48574) |
-| C2 | `catch` is 52 lines (> 50) and mixes mapping, logging and sending | `src/common/filters/all-exceptions.filter.ts:44-95` | Extract pure `toProblem(exception)` | Open |
+| C2 | `catch` is 52 lines (> 50) and mixes mapping, logging and sending | `src/common/filters/all-exceptions.filter.ts:44-95` | Extract pure `toProblem(exception)` | Fixed (09ef193) |
 
 ### infrastructure
 
 | ID | Finding | Location | Fix | Status |
 |---|---|---|---|---|
 | I1 | `DATABASE_URL` read with four semantics: required in the schema, silent localhost default in seed/drizzle config/test setup, hand-rolled check in migrate (also: config) | `src/infrastructure/database/scripts/seed.ts:7`, `scripts/migrate.ts:11-12`, `drizzle.config.ts:8`, `test/setup.ts:4` | Export `databaseEnv = envObject.pick({ DATABASE_URL: true })` from `src/config`; scripts parse it | Fixed (41df9cf, c123f47) |
-| I2 | `ARGON2_OPTIONS` exported without external users | `src/infrastructure/security/password-hasher.ts:5` | Make it module-private | Open |
-| I3 | `Db` type exported but never imported; the int-spec re-derives it | `src/infrastructure/database/drizzle.service.ts:10`, `users.repository.int-spec.ts:14` | Use `Db` in the int-spec | Open |
-| I4 | Dummy-hash literal and creation logic written twice (eager + lazy) | `src/infrastructure/security/password-hasher.ts:18,31` | One private `ensureDummyHash()` | Open |
+| I2 | `ARGON2_OPTIONS` exported without external users | `src/infrastructure/security/password-hasher.ts:5` | Make it module-private | Fixed (a0bf1f8) |
+| I3 | `Db` type exported but never imported; the int-spec re-derives it | `src/infrastructure/database/drizzle.service.ts:10`, `users.repository.int-spec.ts:14` | Use `Db` in the int-spec | Fixed (a0bf1f8) |
+| I4 | Dummy-hash literal and creation logic written twice (eager + lazy) | `src/infrastructure/security/password-hasher.ts:18,31` | One private `ensureDummyHash()` | Fixed (a0bf1f8) |
 | I5 | `quit()` error discarded before force-disconnect, then "closed" logged as normal | `src/infrastructure/redis/redis.service.ts:29-32` | `logger.warn({ err })` before `disconnect()` | Fixed (c67f5f9) |
 
 ### config
@@ -92,8 +92,8 @@ Totals: 44 items — 3 major, 41 minor (47 raw findings with 5 duplicates merged
 | B2 | No spec for close→flush order, double-signal guard, exit codes | `src/bootstrap/graceful-shutdown.ts:14-31` | `graceful-shutdown.spec.ts` with fakes + `process.exit` spy | Open |
 | B3 | No log when shutdown starts or which signal triggered it | `src/bootstrap/graceful-shutdown.ts:10,14-16` | Widen logger to `info`; log `shutting down` with `signal` | Fixed (c67f5f9) |
 | B4 | v2 doc still prescribes `enableShutdownHooks()` and a separate OTel SIGTERM handler; the pivot is recorded only in one CLAUDE.md line | `docs/Backend-Best-Practices-NestJS-v2.md:202,336,1836,2197,2544,2611` | ADR "custom graceful shutdown" + update the doc | Open |
-| O1 | OTLP URLs assembled by hand (`//v1/...` on trailing slash, per-signal env overrides ignored) | `src/observability/tracing.ts:20,24` | Construct exporters without `url`; the library resolves it | Open |
-| O2 | `instrumentation-fs: false` / `instrumentation-pino: true` restate defaults and block env toggles | `src/observability/tracing.ts:31-32` | Remove both entries | Open |
+| O1 | OTLP URLs assembled by hand (`//v1/...` on trailing slash, per-signal env overrides ignored) | `src/observability/tracing.ts:20,24` | Construct exporters without `url`; the library resolves it | Fixed (a0bf1f8) |
+| O2 | `instrumentation-fs: false` / `instrumentation-pino: true` restate defaults and block env toggles | `src/observability/tracing.ts:31-32` | Remove both entries | Fixed (a0bf1f8) |
 | O3 | API and worker share one `OTEL_SERVICE_NAME` (same ConfigMap) — spans indistinguishable | `k8s/deployment.yaml:43`, `k8s/worker-deployment.yaml:32` | Per-Deployment `OTEL_SERVICE_NAME` (`-api`, `-worker`) | Open |
 
 ## Documentation drift found during the review
