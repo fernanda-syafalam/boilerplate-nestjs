@@ -2,7 +2,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { EMAIL_QUEUE } from './email.constants';
-import type { SendEmailRequest } from './email.gateway';
+import { type SendEmailRequest, SendEmailRequestSchema } from './email.gateway';
 
 @Injectable()
 export class EmailService {
@@ -15,10 +15,13 @@ export class EmailService {
   ): Promise<void> {
     // jobId = idempotencyKey so BullMQ drops duplicates; BullMQ rejects ':' in custom ids.
     const idempotencyKey = `order-confirm-${orderId}`;
-    await this.queue.add(
-      'order-confirm',
-      { to, templateId: 'order-confirm', variables, idempotencyKey },
-      { jobId: idempotencyKey },
-    );
+    // Validate here so a bad address fails the caller instead of dying later in the worker.
+    const request = SendEmailRequestSchema.parse({
+      to,
+      templateId: 'order-confirm',
+      variables,
+      idempotencyKey,
+    });
+    await this.queue.add('order-confirm', request, { jobId: idempotencyKey });
   }
 }

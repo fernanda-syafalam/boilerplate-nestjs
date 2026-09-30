@@ -39,4 +39,9 @@ describe('EmailService', () => {
     const options = queueAdd.mock.calls[0]?.[2] as { jobId: string };
     expect(options.jobId).not.toContain(':');
   });
+
+  it('rejects an invalid recipient before touching the queue', async () => {
+    await expect(service.sendOrderConfirmation('order-1', 'not-an-email', {})).rejects.toThrow();
+    expect(queueAdd).not.toHaveBeenCalled();
+  });
 });

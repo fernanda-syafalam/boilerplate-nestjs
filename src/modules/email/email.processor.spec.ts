@@ -61,4 +61,33 @@ describe('EmailProcessor', () => {
       ),
     ).rejects.toThrow('SMTP down');
   });
+
+  it('reports issue paths and codes but not values when rejecting', async () => {
+    const processor = new EmailProcessor(
+      { send: vi.fn() } as unknown as EmailGateway,
+      logger as unknown as PinoLogger,
+    );
+
+    const error = await processor
+      .process(fakeJob({ to: 'secret@leak.test x', templateId: '', variables: {} }))
+      .catch((e: Error) => e);
+
+    expect(error).toBeInstanceOf(UnrecoverableError);
+    const message = (error as Error).message;
+    expect(message).toContain('to:invalid_format');
+    expect(message).toContain('templateId:too_small');
+    expect(message).not.toContain('secret@leak.test');
+  });
+
+  it('logs the error object on failure', () => {
+    const processor = new EmailProcessor(
+      { send: vi.fn() } as unknown as EmailGateway,
+      logger as unknown as PinoLogger,
+    );
+    const err = new Error('boom');
+
+    processor.onFailed(fakeJob({}), err);
+
+    expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ err }), 'email job failed');
+  });
 });

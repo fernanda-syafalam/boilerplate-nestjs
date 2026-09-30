@@ -18,7 +18,11 @@ export class EmailProcessor extends WorkerHost {
   async process(job: Job<SendEmailRequest>): Promise<{ messageId: string }> {
     const parsed = SendEmailRequestSchema.safeParse(job.data);
     if (!parsed.success) {
-      throw new UnrecoverableError('invalid email job payload');
+      // Paths and codes only: issue messages/values may echo the recipient address.
+      const issues = parsed.error.issues
+        .map((i) => `${i.path.join('.') || '(root)'}:${i.code}`)
+        .join(', ');
+      throw new UnrecoverableError(`invalid email job payload: ${issues}`);
     }
     const result = await this.gateway.send(parsed.data);
     this.logger.info(
@@ -35,7 +39,7 @@ export class EmailProcessor extends WorkerHost {
         jobId: job?.id,
         attemptsMade: job?.attemptsMade,
         idempotencyKey: job?.data?.idempotencyKey,
-        err: err.message,
+        err,
       },
       'email job failed',
     );
