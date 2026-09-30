@@ -29,7 +29,7 @@ export const otelSdk = new NodeSDK({
             exportIntervalMillis: 15_000,
           }),
         ],
-        logRecordProcessors: [],
+        // Logs keep the env-driven default (as before this gate) when an endpoint is set.
       }
     : { spanProcessors: [], metricReaders: [], logRecordProcessors: [] }),
   instrumentations: [getNodeAutoInstrumentations()],
