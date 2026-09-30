@@ -66,7 +66,7 @@ Totals: 44 items — 3 major, 41 minor (47 raw findings with 5 duplicates merged
 
 | ID | Finding | Location | Fix | Status |
 |---|---|---|---|---|
-| I1 | `DATABASE_URL` read with four semantics: required in the schema, silent localhost default in seed/drizzle config/test setup, hand-rolled check in migrate (also: config) | `src/infrastructure/database/scripts/seed.ts:7`, `scripts/migrate.ts:11-12`, `drizzle.config.ts:8`, `test/setup.ts:4` | Export `databaseEnv = envObject.pick({ DATABASE_URL: true })` from `src/config`; scripts parse it | Open |
+| I1 | `DATABASE_URL` read with four semantics: required in the schema, silent localhost default in seed/drizzle config/test setup, hand-rolled check in migrate (also: config) | `src/infrastructure/database/scripts/seed.ts:7`, `scripts/migrate.ts:11-12`, `drizzle.config.ts:8`, `test/setup.ts:4` | Export `databaseEnv = envObject.pick({ DATABASE_URL: true })` from `src/config`; scripts parse it | Fixed (41df9cf, c123f47) |
 | I2 | `ARGON2_OPTIONS` exported without external users | `src/infrastructure/security/password-hasher.ts:5` | Make it module-private | Open |
 | I3 | `Db` type exported but never imported; the int-spec re-derives it | `src/infrastructure/database/drizzle.service.ts:10`, `users.repository.int-spec.ts:14` | Use `Db` in the int-spec | Open |
 | I4 | Dummy-hash literal and creation logic written twice (eager + lazy) | `src/infrastructure/security/password-hasher.ts:18,31` | One private `ensureDummyHash()` | Open |
@@ -76,13 +76,13 @@ Totals: 44 items — 3 major, 41 minor (47 raw findings with 5 duplicates merged
 
 | ID | Finding | Location | Fix | Status |
 |---|---|---|---|---|
-| G1 | OTEL defaults duplicated in `tracing.ts`; `.url()` validation never guards the value actually used (also: observability) | `src/config/env.schema.ts:44-46`, `src/observability/tracing.ts:10-12` | Export `otelEnvSchema = envObject.pick(…)`; `tracing.ts` parses it | Open |
-| G2 | Hand-rolled boolean parse: `TRUE`/`yes` silently become `false` | `src/config/env.schema.ts:35-39` | `z.stringbool().default(false)` | Open |
-| G3 | `JWT_EXPIRES_IN` unvalidated; a bad value fails at first login, not at startup; format differs from the refresh TTL | `src/config/env.schema.ts:16` | Seconds via `z.coerce.number().int().positive()` (or validate the duration pattern) | Open |
-| G4 | `CORS_ORIGINS` split in the config factory, so the wildcard refine sees the raw string and `a,,b` passes | `src/config/configuration.ts:29`, `env.schema.ts:31` | Split/trim/validate in a schema `.transform()` | Open |
-| G5 | No test for the `appConfig` mapping (incl. CORS parsing) | `src/config/configuration.ts:4-37` | Covered by G4's schema tests | Open |
-| G6 | `main.ts` reads `TRUST_PROXY_HOPS` via `parseEnv()` instead of `AppConfigService` with no written reason | `src/main.ts:26` | One-line why (adapter is built before Nest exists) | Open |
-| G7 | `export type { AppConfig }` has no consumer outside `src/config` | `src/config/index.ts:5` | Drop the re-export | Open |
+| G1 | OTEL defaults duplicated in `tracing.ts`; `.url()` validation never guards the value actually used (also: observability) | `src/config/env.schema.ts:44-46`, `src/observability/tracing.ts:10-12` | Export `otelEnvSchema = envObject.pick(…)`; `tracing.ts` parses it | Fixed (41df9cf, ddad2fb) |
+| G2 | Hand-rolled boolean parse: `TRUE`/`yes` silently become `false` | `src/config/env.schema.ts:35-39` | `z.stringbool().default(false)` | Fixed (41df9cf, ddad2fb) |
+| G3 | `JWT_EXPIRES_IN` unvalidated; a bad value fails at first login, not at startup; format differs from the refresh TTL | `src/config/env.schema.ts:16` | Seconds via `z.coerce.number().int().positive()` (or validate the duration pattern) | Fixed (41df9cf) |
+| G4 | `CORS_ORIGINS` split in the config factory, so the wildcard refine sees the raw string and `a,,b` passes | `src/config/configuration.ts:29`, `env.schema.ts:31` | Split/trim/validate in a schema `.transform()` | Fixed (41df9cf) |
+| G5 | No test for the `appConfig` mapping (incl. CORS parsing) | `src/config/configuration.ts:4-37` | Covered by G4's schema tests | Fixed (41df9cf) |
+| G6 | `main.ts` reads `TRUST_PROXY_HOPS` via `parseEnv()` instead of `AppConfigService` with no written reason | `src/main.ts:26` | One-line why (adapter is built before Nest exists) | Fixed (41df9cf) |
+| G7 | `export type { AppConfig }` has no consumer outside `src/config` | `src/config/index.ts:5` | Drop the re-export | Fixed (41df9cf) |
 
 ### bootstrap / observability
 
