@@ -4,7 +4,7 @@ import { PinoLogger } from 'nestjs-pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { User } from '../../infrastructure/database/schema/users.schema';
 import { PasswordHasher } from '../../infrastructure/security/password-hasher';
-import { encodeCursor } from './users.cursor';
+import { decodeCursor, encodeCursor } from './users.cursor';
 import { UsersRepository } from './users.repository';
 import { UsersService } from './users.service';
 
@@ -143,6 +143,16 @@ describe('UsersService', () => {
       const page = await service.list(undefined, 2);
 
       expect(page.nextCursor).toBeNull();
+    });
+
+    it('turns a round-tripped cursor back into the id and Date the repository pages from', async () => {
+      repo.listPage.mockResolvedValue({ items: [], hasMore: false });
+      const cursor = decodeCursor(encodeCursor(second));
+      if (!cursor) throw new Error('cursor should decode');
+
+      await service.list(cursor, 2);
+
+      expect(repo.listPage).toHaveBeenCalledWith({ id: second.id, createdAt: second.createdAt }, 2);
     });
   });
 });
