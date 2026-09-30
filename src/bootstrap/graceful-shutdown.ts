@@ -1,6 +1,5 @@
 import type { INestApplicationContext } from '@nestjs/common';
 import type { PinoLogger } from 'nestjs-pino';
-import { otelSdk } from '../observability/tracing';
 
 const SIGNALS: NodeJS.Signals[] = ['SIGTERM', 'SIGINT'];
 
@@ -8,6 +7,7 @@ const SIGNALS: NodeJS.Signals[] = ['SIGTERM', 'SIGINT'];
 export function registerGracefulShutdown(
   app: INestApplicationContext,
   logger: Pick<PinoLogger, 'info' | 'error' | 'warn'>,
+  flushTelemetry: () => Promise<void>,
 ): void {
   let shuttingDown = false;
 
@@ -23,7 +23,7 @@ export function registerGracefulShutdown(
       logger.error({ err }, 'app close failed');
     }
     try {
-      await otelSdk.shutdown();
+      await flushTelemetry();
     } catch (err) {
       logger.warn({ err }, 'otel shutdown failed');
     }

@@ -19,13 +19,19 @@ export const otelSdk = new NodeSDK({
     [ATTR_SERVICE_NAME]: serviceName,
     [ATTR_SERVICE_VERSION]: serviceVersion,
   }),
-  traceExporter: otlpEndpoint ? new OTLPTraceExporter() : undefined,
-  metricReader: otlpEndpoint
-    ? new PeriodicExportingMetricReader({
-        exporter: new OTLPMetricExporter(),
-        exportIntervalMillis: 15_000,
-      })
-    : undefined,
+  // Empty arrays (not undefined): sdk-node treats undefined as "configure from env" and defaults to OTLP on localhost.
+  ...(otlpEndpoint
+    ? {
+        traceExporter: new OTLPTraceExporter(),
+        metricReaders: [
+          new PeriodicExportingMetricReader({
+            exporter: new OTLPMetricExporter(),
+            exportIntervalMillis: 15_000,
+          }),
+        ],
+        logRecordProcessors: [],
+      }
+    : { spanProcessors: [], metricReaders: [], logRecordProcessors: [] }),
   instrumentations: [getNodeAutoInstrumentations()],
 });
 

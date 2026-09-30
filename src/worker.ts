@@ -1,5 +1,5 @@
 // Must load first: auto-instrumentation patches modules at import time.
-import './observability/tracing';
+import { otelSdk } from './observability/tracing';
 
 import { NestFactory } from '@nestjs/core';
 import { Logger, PinoLogger } from 'nestjs-pino';
@@ -11,7 +11,7 @@ async function bootstrap(): Promise<void> {
     bufferLogs: true,
   });
   app.useLogger(app.get(Logger));
-  registerGracefulShutdown(app, await app.resolve(PinoLogger));
+  registerGracefulShutdown(app, await app.resolve(PinoLogger), () => otelSdk.shutdown());
   app.get(Logger).log('worker started');
 }
 

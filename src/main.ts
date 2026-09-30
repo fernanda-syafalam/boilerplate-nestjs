@@ -1,5 +1,5 @@
 // Must load first: auto-instrumentation patches modules at import time.
-import './observability/tracing';
+import { otelSdk } from './observability/tracing';
 
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
@@ -42,7 +42,7 @@ async function bootstrap(): Promise<void> {
 
   app.enableVersioning({ type: VersioningType.URI });
 
-  registerGracefulShutdown(app, await app.resolve(PinoLogger));
+  registerGracefulShutdown(app, await app.resolve(PinoLogger), () => otelSdk.shutdown());
 
   const config = app.get<AppConfigService>(ConfigService);
   const port = config.get('app.port', { infer: true });
