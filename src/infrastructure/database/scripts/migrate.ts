@@ -3,15 +3,15 @@ import { resolve } from 'node:path';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
+import { databaseEnvSchema } from '../../../config/env.schema';
 
 // Same relative depth from src/ (tsx) and dist/ (compiled): <root>/drizzle.
 const MIGRATIONS_FOLDER = resolve(__dirname, '../../../../drizzle');
 
 async function main(): Promise<void> {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error('DATABASE_URL is required');
+  const { DATABASE_URL } = databaseEnvSchema.parse(process.env);
 
-  const pool = new Pool({ connectionString, max: 1 });
+  const pool = new Pool({ connectionString: DATABASE_URL, max: 1 });
   try {
     await migrate(drizzle(pool), { migrationsFolder: MIGRATIONS_FOLDER });
   } finally {

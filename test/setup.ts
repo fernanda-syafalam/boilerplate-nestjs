@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 
 process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
-process.env.DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://app:app@localhost:5432/app';
+// Explicit test DB (CI may override); the app itself has no DATABASE_URL default.
+process.env.DATABASE_URL ??= 'postgres://app:app@localhost:5432/app';
 process.env.JWT_SECRET =
   process.env.JWT_SECRET ?? 'test-secret-must-be-at-least-32-characters-long';
 process.env.LOG_LEVEL = process.env.LOG_LEVEL ?? 'silent';

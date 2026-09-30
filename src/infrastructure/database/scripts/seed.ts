@@ -2,10 +2,9 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { PinoLogger } from 'nestjs-pino';
 import { Pool } from 'pg';
+import { databaseEnvSchema } from '../../../config/env.schema';
 import { PasswordHasher } from '../../security/password-hasher';
 import { type User, users } from '../schema/users.schema';
-
-const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://app:app@localhost:5432/app';
 
 const DEV_PASSWORD = 'Passw0rd!2345';
 
@@ -28,7 +27,7 @@ const EXTRA_CUSTOMERS: SeedUser[] = Array.from({ length: 12 }, (_, i) => ({
 }));
 
 async function main(): Promise<void> {
-  const pool = new Pool({ connectionString: DATABASE_URL });
+  const pool = new Pool({ connectionString: databaseEnvSchema.parse(process.env).DATABASE_URL });
   const db = drizzle(pool, { schema: { users } });
 
   const passwordHash = await new PasswordHasher(new PinoLogger({})).hash(DEV_PASSWORD);

@@ -1,5 +1,28 @@
 import { z } from 'zod';
 
+function isHttpOrigin(value: string): boolean {
+  const parsed = URL.parse(value);
+  return (
+    parsed !== null &&
+    (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+    parsed.origin === value
+  );
+}
+
+const corsOrigins = z.string().transform((raw, ctx) => {
+  const origins = raw.split(',').map((o) => o.trim());
+  for (const origin of origins) {
+    if (origin === '' || origin.includes('*') || !isHttpOrigin(origin)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `CORS_ORIGINS entries must be non-empty http(s) origins without wildcards, got "${origin}"`,
+      });
+      return z.NEVER;
+    }
+  }
+  return origins;
+});
+
 const envObject = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -13,7 +36,11 @@ const envObject = z.object({
   THROTTLER_LIMIT: z.coerce.number().int().positive().default(100),
 
   JWT_SECRET: z.string().min(32),
-  JWT_EXPIRES_IN: z.string().default('15m'),
+  // jsonwebtoken reads a bare numeric string as milliseconds, so only unit-suffixed durations pass.
+  JWT_EXPIRES_IN: z
+    .string()
+    .regex(/^[1-9]\d*[smhd]$/, "JWT_EXPIRES_IN must be a duration like '15m' (unit s, m, h or d)")
+    .default('15m'),
   JWT_ISSUER: z.string().min(1).default('boilerplate-nestjs'),
   JWT_AUDIENCE: z.string().min(1).default('boilerplate-nestjs'),
   // Opaque token, not a JWT; this value is the Redis TTL.
@@ -25,25 +52,25 @@ const envObject = z.object({
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 
-  CORS_ORIGINS: z
-    .string()
-    .default('http://localhost:5173')
-    .refine((v) => !v.includes('*'), 'CORS_ORIGINS must not contain wildcards'),
+  CORS_ORIGINS: corsOrigins.default(['http://localhost:5173']),
 
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
 
-  COOKIE_SECURE: z
-    .string()
-    .transform((v) => v === 'true' || v === '1')
-    .pipe(z.boolean())
-    .default(false),
+  COOKIE_SECURE: z.stringbool().default(false),
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
 
-  // Read directly by observability/tracing.ts before ConfigModule exists; unset endpoint = no export.
-  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  // Parsed via otelEnvSchema by observability/tracing.ts before ConfigModule exists; unset endpoint = no export.
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional(),
   OTEL_SERVICE_NAME: z.string().min(1).default('boilerplate-nestjs'),
   SERVICE_VERSION: z.string().default('0.0.0'),
+});
+
+export const databaseEnvSchema = envObject.pick({ DATABASE_URL: true });
+export const otelEnvSchema = envObject.pick({
+  OTEL_EXPORTER_OTLP_ENDPOINT: true,
+  OTEL_SERVICE_NAME: true,
+  SERVICE_VERSION: true,
 });
 
 export const envSchema = envObject.superRefine((env, ctx) => {

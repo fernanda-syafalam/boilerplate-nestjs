@@ -26,7 +26,7 @@ export const appConfig = registerAs('app', () => {
     },
     logLevel: env.LOG_LEVEL,
     cors: {
-      origins: env.CORS_ORIGINS.split(',').map((o) => o.trim()),
+      origins: env.CORS_ORIGINS,
     },
     cookie: {
       secure: env.COOKIE_SECURE,

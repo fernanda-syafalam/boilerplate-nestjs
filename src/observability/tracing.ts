@@ -5,11 +5,14 @@ import { resourceFromAttributes } from '@opentelemetry/resources';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
+import { otelEnvSchema } from '../config/env.schema';
 
-// Must be the first import; reads process.env because it runs before ConfigModule.
-const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-const serviceName = process.env.OTEL_SERVICE_NAME ?? 'boilerplate-nestjs';
-const serviceVersion = process.env.SERVICE_VERSION ?? '0.0.0';
+// Must be the first import; parses process.env directly because it runs before ConfigModule.
+const {
+  OTEL_EXPORTER_OTLP_ENDPOINT: otlpEndpoint,
+  OTEL_SERVICE_NAME: serviceName,
+  SERVICE_VERSION: serviceVersion,
+} = otelEnvSchema.parse(process.env);
 
 export const otelSdk = new NodeSDK({
   resource: resourceFromAttributes({

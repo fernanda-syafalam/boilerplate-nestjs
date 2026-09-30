@@ -23,6 +23,7 @@ function requestId(req: IncomingMessage | Http2ServerRequest): string {
 }
 
 async function bootstrap(): Promise<void> {
+  // parseEnv, not AppConfigService: the Fastify adapter is built before the Nest container exists.
   const trustProxyHops = parseEnv().TRUST_PROXY_HOPS;
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
