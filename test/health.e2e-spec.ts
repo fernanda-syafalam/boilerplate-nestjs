@@ -8,6 +8,7 @@ import { inMemoryThrottler } from './support/in-memory-throttler';
 
 describe('Health (e2e)', () => {
   let app: NestFastifyApplication;
+  let databaseUp = true;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -17,7 +18,7 @@ describe('Health (e2e)', () => {
       .useValue(inMemoryThrottler.options)
       .overrideProvider(DrizzleService)
       .useValue({
-        ping: async () => true,
+        ping: async () => databaseUp,
         onModuleInit: () => Promise.resolve(),
         onModuleDestroy: () => Promise.resolve(),
       })
@@ -53,5 +54,21 @@ describe('Health (e2e)', () => {
       status: 'ok',
       checks: { database: 'ok', redis: 'ok' },
     });
+  });
+
+  it('GET /readyz returns a 503 problem body carrying only checks when a dependency is down', async () => {
+    databaseUp = false;
+    try {
+      const res = await app.inject({ method: 'GET', url: '/readyz' });
+      expect(res.statusCode).toBe(503);
+      expect(res.headers['content-type']).toContain('application/problem+json');
+      expect(res.json()).toMatchObject({
+        status: 503,
+        title: 'Service Unavailable',
+        checks: { database: 'down', redis: 'ok' },
+      });
+    } finally {
+      databaseUp = true;
+    }
   });
 });

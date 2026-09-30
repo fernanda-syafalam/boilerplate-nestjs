@@ -5,6 +5,7 @@ import {
   type ExceptionFilter,
   HttpException,
   HttpStatus,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { PinoLogger } from 'nestjs-pino';
@@ -54,8 +55,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (exception instanceof ZodError) {
       status = HttpStatus.BAD_REQUEST;
-      title = 'Validation Failed';
-      errors = exception.flatten();
+      // Must match the global ZodValidationPipe body (issues + lowercase title) so clients parse one shape.
+      title = 'Validation failed';
+      errors = exception.issues;
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       const res = exception.getResponse();
@@ -77,7 +79,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
-      this.logger.error({ err: exception }, 'unhandled exception');
+      // A thrown 503 is the readiness probe reporting a down dependency, not a bug; error-level would alert on every probe.
+      if (exception instanceof ServiceUnavailableException) {
+        this.logger.warn({ err: exception }, 'service unavailable');
+      } else {
+        this.logger.error({ err: exception }, 'unhandled exception');
+      }
     }
 
     const body: ProblemDetails = {

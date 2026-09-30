@@ -1,6 +1,13 @@
-import { type ArgumentsHost, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
+import {
+  type ArgumentsHost,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PinoLogger } from 'nestjs-pino';
+import { ZodValidationException } from 'nestjs-zod';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { AllExceptionsFilter } from './all-exceptions.filter';
@@ -38,10 +45,14 @@ function fakeHost(opts: { url?: string; reqId?: string } = {}): {
 
 describe('AllExceptionsFilter', () => {
   let filter: AllExceptionsFilter;
-  let logger: { error: ReturnType<typeof vi.fn>; setContext: ReturnType<typeof vi.fn> };
+  let logger: {
+    error: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+    setContext: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(async () => {
-    logger = { error: vi.fn(), setContext: vi.fn() };
+    logger = { error: vi.fn(), warn: vi.fn(), setContext: vi.fn() };
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [AllExceptionsFilter, { provide: PinoLogger, useValue: logger }],
     }).compile();
@@ -65,23 +76,20 @@ describe('AllExceptionsFilter', () => {
     expect(body.title).toBe('user not found');
   });
 
-  it('maps a ZodError to 400 Validation Failed', () => {
-    const { host, status, send } = fakeHost();
+  it('renders a raw ZodError with the same shape as the global validation pipe', () => {
+    const parsed = z.object({ x: z.number() }).safeParse({ x: 'not a number' });
+    if (parsed.success) throw new Error('unreachable');
 
-    let zodError: z.ZodError;
-    try {
-      z.object({ x: z.number() }).parse({ x: 'not a number' });
-      throw new Error('unreachable');
-    } catch (err) {
-      zodError = err as z.ZodError;
-    }
+    const raw = fakeHost({ reqId: 'r' });
+    filter.catch(parsed.error, raw.host);
+    const piped = fakeHost({ reqId: 'r' });
+    filter.catch(new ZodValidationException(parsed.error), piped.host);
 
-    filter.catch(zodError, host);
-
-    expect(status).toHaveBeenCalledWith(400);
-    const body = send.mock.calls[0]?.[0] as ProblemDetailsResponse;
-    expect(body.title).toBe('Validation Failed');
-    expect(body.errors).toBeDefined();
+    expect(raw.status).toHaveBeenCalledWith(400);
+    const rawBody = raw.send.mock.calls[0]?.[0] as ProblemDetailsResponse;
+    expect(rawBody.title).toBe('Validation failed');
+    expect(rawBody.errors).toEqual(parsed.error.issues);
+    expect(rawBody).toEqual(piped.send.mock.calls[0]?.[0]);
   });
 
   it('hides server-side errors and logs the stack', () => {
@@ -124,6 +132,16 @@ describe('AllExceptionsFilter', () => {
     const body = send.mock.calls[0]?.[0] as ProblemDetailsResponse;
     expect(body.title).toBe('Bad Gateway');
     expect(logger.error).toHaveBeenCalledOnce();
+  });
+
+  it('logs a thrown ServiceUnavailableException at warn, not error', () => {
+    const { host, status } = fakeHost();
+
+    filter.catch(new ServiceUnavailableException({ checks: { database: 'down' } }), host);
+
+    expect(status).toHaveBeenCalledWith(503);
+    expect(logger.warn).toHaveBeenCalledOnce();
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('logs and returns 500 for a thrown non-Error value', () => {

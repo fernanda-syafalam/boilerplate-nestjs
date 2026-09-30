@@ -39,7 +39,6 @@ export class HealthController {
 
     if (!databaseOk || !redisOk) {
       throw new ServiceUnavailableException({
-        status: 'degraded',
         checks: {
           database: databaseOk ? 'ok' : 'down',
           redis: redisOk ? 'ok' : 'down',
