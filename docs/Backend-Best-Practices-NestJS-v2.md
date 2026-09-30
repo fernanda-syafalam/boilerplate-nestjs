@@ -199,14 +199,14 @@ origin**:** config**.get**('cors.origins'**,** { infer**:** **true** })**,**\
 credentials**:** **true,**\
 })**;**\
 \
-app**.enableShutdownHooks**()**;** *// wajib untuk graceful shutdown di K8s*\
+registerGracefulShutdown(app**,** { flushTelemetry })**;** *// graceful shutdown di K8s; enableShutdownHooks() NOT used, see ADR-0003*\
 \
 **await** app**.listen**(config**.get**('port'**,** { infer**:** **true** })**,** '0.0.0.0')**;**\
 }\
 \
 **void** **bootstrap**()**;**
 
-Tiga hal yang sering terlewat: 1. '0.0.0.0' di listen() — tanpa ini container tidak terjangkau dari luar pod. 2. enableShutdownHooks() — tanpa ini SIGTERM dari Kubernetes tidak men-trigger OnModuleDestroy, koneksi DB dan worker BullMQ tidak ditutup bersih. 3. bufferLogs: true — tanpa ini log bootstrap pakai default Nest logger (text), bukan pino (JSON), dan susah di-grep di Loki.
+Tiga hal yang sering terlewat: 1. '0.0.0.0' di listen() — tanpa ini container tidak terjangkau dari luar pod. 2. registerGracefulShutdown() (ADR-0003; enableShutdownHooks() is NOT used) — without it SIGTERM from Kubernetes does not close the app cleanly: DB connections and BullMQ workers are not closed. 3. bufferLogs: true — tanpa ini log bootstrap pakai default Nest logger (text), bukan pino (JSON), dan susah di-grep di Loki.
 
 ### Module yang sehat
 
@@ -333,7 +333,7 @@ export **class** DrizzleModule {}
 
 - [ ] Konfigurasi env divalidasi pakai zod di startup; aplikasi crash saat config invalid.
 
-- [ ] main.ts pakai NestFastifyApplication + FastifyAdapter dengan trustProxy, genReqId, dan enableShutdownHooks().
+- [ ] main.ts uses NestFastifyApplication + FastifyAdapter with trustProxy and genReqId, and calls registerGracefulShutdown() (not enableShutdownHooks(); see ADR-0003).
 
 - [ ] Repository class di-inject ke service; service tidak import Drizzle/db langsung.
 
@@ -1833,9 +1833,7 @@ instrumentations**:** \[\
 \
 otelSdk**.start**()**;**\
 \
-process**.on**('SIGTERM'**,** () **=>** {\
-otelSdk**.shutdown**()**.catch**(() **=>** {})**.finally**(() **=>** process**.exit**(0))**;**\
-})**;**
+*// No SIGTERM handler here: the entrypoint passes otelSdk.shutdown() to registerGracefulShutdown as flushTelemetry, so telemetry is flushed after Nest closes (ADR-0003).*
 
 tracing.ts **harus di-import paling awal** — sebelum NestFactory.create, sebelum module apapun yang akan di-instrument.
 
@@ -2040,7 +2038,7 @@ export **interface** SendEmailJob {\
 to**:** string**;**\
 templateId**:** string**;**\
 variables**:** Record**<**string**,** string**>;**\
-idempotencyKey**:** string**;** *// mis. \\order-confirm:\\{orderId}\\*\
+idempotencyKey**:** string**;** *// mis. \\order-confirm-\\{orderId}\\*\
 }\
 \
 @**Injectable**()\
@@ -2050,8 +2048,8 @@ export **class** EmailService {\
 **async** **sendOrderConfirmation**(orderId**:** string**,** to**:** string**,** vars**:** Record**<**string**,** string**>**) {\
 **await** **this.**queue**.add**(\
 'order-confirm'**,**\
-{ to**,** templateId**:** 'order-confirm'**,** variables**:** vars**,** idempotencyKey**:** \`order-confirm:**\${**orderId**}**\` }**,**\
-{ jobId**:** \`order-confirm:**\${**orderId**}**\` }**,** *// jobId = idempotency*\
+{ to**,** templateId**:** 'order-confirm'**,** variables**:** vars**,** idempotencyKey**:** \`order-confirm-**\${**orderId**}**\` }**,**\
+{ jobId**:** \`order-confirm-**\${**orderId**}**\` }**,** *// jobId = idempotency*\
 )**;**\
 }\
 }
@@ -2109,7 +2107,7 @@ import { WorkerModule } from './worker.module'**;**\
 **async** **function** **bootstrap**() {\
 **const** app **=** **await** NestFactory**.createApplicationContext**(WorkerModule**,** { bufferLogs**:** **true** })**;**\
 app**.useLogger**(app**.get**(Logger))**;**\
-app**.enableShutdownHooks**()**;**\
+registerGracefulShutdown(app**,** { flushTelemetry })**;** *// not enableShutdownHooks(); see ADR-0003*\
 app**.get**(Logger)**.log**('worker started')**;**\
 *// proses tetap hidup; BullMQ Worker yang menerima job*\
 }\
@@ -2182,7 +2180,7 @@ Metric custom: bullmq_jobs_processed_total{queue, status}, bullmq_job_duration_s
 
 - **Worker run di proses HTTP yang sama.** Memakan CPU yang harusnya untuk request, scaling jadi terikat. Pisah proses.
 
-- **Tidak ada graceful shutdown.** SIGTERM → job aktif terbunuh tengah jalan → state inkonsisten. app.enableShutdownHooks() + BullMQ worker.close().
+- **Tidak ada graceful shutdown.** SIGTERM → job aktif terbunuh tengah jalan → state inkonsisten. registerGracefulShutdown() (closes Nest, which drains BullMQ workers; ADR-0003).
 
 - **Failed queue tidak di-monitor.** Job gagal diam-diam berhari-hari, baru ketahuan dari customer complaint.
 
@@ -2194,7 +2192,7 @@ Metric custom: bullmq_jobs_processed_total{queue, status}, bullmq_job_duration_s
 
 - [ ] Job didefinisikan idempotent (jobId atau idempotency key + cek di consumer).
 
-- [ ] Worker run di proses terpisah, dengan enableShutdownHooks().
+- [ ] Worker runs in a separate process and calls registerGracefulShutdown() (ADR-0003).
 
 - [ ] Concurrency limit eksplisit, di-tune sesuai kapasitas downstream.
 
@@ -2539,17 +2537,12 @@ Alternatif minimalis: hapus `preStop` sama sekali dan handle SIGTERM di app deng
 
 ### Graceful shutdown di NestJS
 
-enableShutdownHooks() (lihat Pilar 1) men-trigger OnModuleDestroy saat SIGTERM. Tambahan: di Fastify, pakai app.close() untuk hentikan accept koneksi baru sebelum OnModuleDestroy.
+This project does NOT use `enableShutdownHooks()` (see [ADR-0003](./adr/0003-custom-graceful-shutdown.md)). Both entrypoints (`src/main.ts`, `src/worker.ts`) call `registerGracefulShutdown` from `src/bootstrap/graceful-shutdown.ts`, which handles SIGTERM/SIGINT once (double-signal guard), logs `shutting down` with the signal, runs `app.close()` first (drains HTTP and BullMQ workers, runs OnModuleDestroy such as `DrizzleService.onModuleDestroy()`), then flushes telemetry via the injected `flushTelemetry` callback (the OTel SDK shutdown), then calls `process.exit` (exit code 1 if `app.close()` failed) so a leftover socket cannot keep the pod alive until SIGKILL.
 
-*// di main.ts (potongan, ditambahkan setelah enableShutdownHooks)*\
-**const** shutdown **=** **async** (signal**:** string) **=>** {\
-app**.get**(Logger)**.log**(\`received **\${**signal**}**, shutting down\`)**;**\
-**await** app**.close**()**;**\
-}**;**\
-process**.on**('SIGTERM'**,** () **=>** **void** **shutdown**('SIGTERM'))**;**\
-process**.on**('SIGINT'**,** () **=>** **void** **shutdown**('SIGINT'))**;**
+*// in main.ts / worker.ts*\
+registerGracefulShutdown(app**,** { flushTelemetry**:** () **=>** otelSdk**.shutdown**() })**;**
 
-app.close() memanggil semua OnModuleDestroy — termasuk DrizzleService.onModuleDestroy() yang close pool, dan BullMQ worker close() yang membiarkan job aktif selesai (sampai timeout).
+Set `terminationGracePeriodSeconds` to cover drain plus telemetry flush.
 
 ### Resource sizing
 
@@ -2608,7 +2601,7 @@ Untuk worker, scale berdasarkan queue depth (KEDA + BullMQ scaler) lebih tepat d
 
 - [ ] terminationGracePeriodSeconds ≥ worst-case shutdown time aplikasi (termasuk worker).
 
-- [ ] app.close() di-call di handler SIGTERM; enableShutdownHooks() aktif.
+- [ ] registerGracefulShutdown() is wired in every entrypoint (closes Nest, flushes telemetry, exits; ADR-0003).
 
 - [ ] Resource request & limit di-set, bukan unbounded.
 
@@ -2726,9 +2719,9 @@ E2E test pakai Test.createTestingModule({ imports: \[AppModule\] }) tapi lupa us
 
 Pakai get<T>('database.url', { infer: true }) atau getOrThrow. Type aman, fail-fast kalau missing.
 
-### 16. Lupa app.enableShutdownHooks()
+### 16. Forgetting registerGracefulShutdown()
 
-K8s SIGTERM → proses langsung mati, koneksi DB tidak di-close, BullMQ worker tidak close. State inkonsisten saat scale-down. Wajib aktif.
+K8s SIGTERM → the process dies immediately, DB connections are not closed, BullMQ workers are not closed. Inconsistent state on scale-down. Every entrypoint must call registerGracefulShutdown() (ADR-0003).
 
 ### 17. throw new Error('not found') bukan HttpException
 

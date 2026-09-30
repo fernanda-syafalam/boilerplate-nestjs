@@ -45,6 +45,10 @@ spec:
                 name: boilerplate-nestjs-config
             - secretRef:
                 name: boilerplate-nestjs-secrets
+          # Per-Deployment name so API and worker spans are distinguishable.
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: boilerplate-nestjs-api
           # Distroless has no sleep: delay SIGTERM so endpoints are removed first.
           lifecycle:
             preStop:

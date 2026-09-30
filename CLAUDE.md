@@ -30,7 +30,7 @@ Tooling, infrastructure, and the first reference modules are in place:
   and worker; inject as `AppConfigService` with `@Inject(ConfigService)`
 - Email: `EmailModule` (producer, API) vs `EmailWorkerModule` (processor,
   worker only). BullMQ custom job ids must not contain `:`
-- Shutdown: `registerGracefulShutdown` closes Nest, then flushes OTel, then exits
+- Shutdown (ADR-0003): `registerGracefulShutdown` closes Nest, then flushes OTel, then exits
 - Ops: one image, three entrypoints — `dist/main.js`, `dist/worker.js`,
   `dist/infrastructure/database/scripts/migrate.js` (k8s `migrate-job.yaml`)
 - `AppModule` is a pure composition root
@@ -66,6 +66,7 @@ All decisions are already documented:
 - `docs/Backend-Best-Practices-NestJS-v2.md` — pattern detail per pilar
 - `docs/adr/0001-use-drizzle-orm-over-prisma.md` — why Drizzle (not Prisma)
 - `docs/adr/0002-tooling-vitest-biome-zod.md` — why Vitest + Biome + zod
+- `docs/adr/0003-custom-graceful-shutdown.md` — why custom shutdown, not `enableShutdownHooks()`
 
 If the user asks "why X", do not re-derive — check the ADR or v2 doc.
 If a decision is genuinely obsolete, propose a new ADR; do not silently

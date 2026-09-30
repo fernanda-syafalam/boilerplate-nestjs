@@ -46,7 +46,7 @@ scaling on queue depth).
 - **Liveness `/healthz`** is intentionally cheap and dependency-free.
   K8s kills the pod when this fails — a slow database must NOT take all
   replicas down at once.
-- **Readiness `/readyz`** pings Postgres. Failure removes the pod from
+- **Readiness `/readyz`** pings Postgres and Redis. Failure removes the pod from
   the Service endpoints (stops routing traffic) but leaves the pod
   running so it can recover.
 - **Startup probe** allows up to 150 s for the process to come online

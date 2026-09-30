@@ -34,6 +34,10 @@ spec:
                 name: boilerplate-nestjs-config
             - secretRef:
                 name: boilerplate-nestjs-secrets
+          # Per-Deployment name so API and worker spans are distinguishable.
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: boilerplate-nestjs-worker
           resources:
             requests:
               cpu: 100m
