@@ -1,5 +1,6 @@
 /** Idempotent. Run `pnpm db:migrate` then `pnpm db:seed`; dev passwords are local only. */
 import { drizzle } from 'drizzle-orm/node-postgres';
+import { PinoLogger } from 'nestjs-pino';
 import { Pool } from 'pg';
 import { PasswordHasher } from '../../security/password-hasher';
 import { type User, users } from '../schema/users.schema';
@@ -30,7 +31,7 @@ async function main(): Promise<void> {
   const pool = new Pool({ connectionString: DATABASE_URL });
   const db = drizzle(pool, { schema: { users } });
 
-  const passwordHash = await new PasswordHasher().hash(DEV_PASSWORD);
+  const passwordHash = await new PasswordHasher(new PinoLogger({})).hash(DEV_PASSWORD);
   const seedUsers = [...CANONICAL_USERS, ...EXTRA_CUSTOMERS];
 
   let created = 0;
