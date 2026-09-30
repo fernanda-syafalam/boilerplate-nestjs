@@ -135,6 +135,16 @@ describe('Auth (e2e)', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it('POST /v1/auth/login returns 400 for an email longer than the signup limit', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: { email: `${'a'.repeat(244)}@example.com`, password: 'whatever' },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('GET /v1/auth/me returns 401 without a bearer token', async () => {
     const res = await app.inject({ method: 'GET', url: '/v1/auth/me' });
     expect(res.statusCode).toBe(401);

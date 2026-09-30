@@ -1,10 +1,11 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { EmailSchema } from '../../../common/schemas/email.schema';
 
 /** strict() rejects unknown keys (mass-assignment). */
 export const CreateUserSchema = z
   .object({
-    email: z.string().trim().toLowerCase().pipe(z.email().max(255)),
+    email: EmailSchema,
     fullName: z.string().trim().min(1).max(120),
     password: z.string().min(12).max(128),
   })
