@@ -32,6 +32,6 @@ export function registerGracefulShutdown(
   };
 
   for (const signal of SIGNALS) {
-    process.once(signal, () => void shutdown(signal));
+    process.on(signal, () => void shutdown(signal));
   }
 }

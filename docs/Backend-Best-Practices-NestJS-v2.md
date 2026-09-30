@@ -199,7 +199,7 @@ origin**:** config**.get**('cors.origins'**,** { infer**:** **true** })**,**\
 credentials**:** **true,**\
 })**;**\
 \
-registerGracefulShutdown(app**,** logger**,** () **=>** otelSdk**.shutdown**())**;** *// graceful shutdown di K8s; enableShutdownHooks() NOT used, see ADR-0003*\
+registerGracefulShutdown(app**,** **await** app**.resolve**(PinoLogger)**,** () **=>** otelSdk**.shutdown**())**;** *// graceful shutdown in K8s; enableShutdownHooks() NOT used, see ADR-0003*\
 \
 **await** app**.listen**(config**.get**('port'**,** { infer**:** **true** })**,** '0.0.0.0')**;**\
 }\
@@ -2107,7 +2107,7 @@ import { WorkerModule } from './worker.module'**;**\
 **async** **function** **bootstrap**() {\
 **const** app **=** **await** NestFactory**.createApplicationContext**(WorkerModule**,** { bufferLogs**:** **true** })**;**\
 app**.useLogger**(app**.get**(Logger))**;**\
-registerGracefulShutdown(app**,** logger**,** () **=>** otelSdk**.shutdown**())**;** *// not enableShutdownHooks(); see ADR-0003*\
+registerGracefulShutdown(app**,** **await** app**.resolve**(PinoLogger)**,** () **=>** otelSdk**.shutdown**())**;** *// not enableShutdownHooks(); see ADR-0003*\
 app**.get**(Logger)**.log**('worker started')**;**\
 *// proses tetap hidup; BullMQ Worker yang menerima job*\
 }\
@@ -2180,7 +2180,7 @@ Metric custom: bullmq_jobs_processed_total{queue, status}, bullmq_job_duration_s
 
 - **Worker run di proses HTTP yang sama.** Memakan CPU yang harusnya untuk request, scaling jadi terikat. Pisah proses.
 
-- **Tidak ada graceful shutdown.** SIGTERM → job aktif terbunuh tengah jalan → state inkonsisten. registerGracefulShutdown() (closes Nest, which drains BullMQ workers; ADR-0003).
+- **No graceful shutdown.** SIGTERM → in-flight jobs are killed mid-run → inconsistent state. registerGracefulShutdown() (closes Nest, which drains BullMQ workers; ADR-0003).
 
 - **Failed queue tidak di-monitor.** Job gagal diam-diam berhari-hari, baru ketahuan dari customer complaint.
 
@@ -2540,7 +2540,7 @@ Alternatif minimalis: hapus `preStop` sama sekali dan handle SIGTERM di app deng
 This project does NOT use `enableShutdownHooks()` (see [ADR-0003](./adr/0003-custom-graceful-shutdown.md)). Both entrypoints (`src/main.ts`, `src/worker.ts`) call `registerGracefulShutdown` from `src/bootstrap/graceful-shutdown.ts`, which handles SIGTERM/SIGINT once (double-signal guard), logs `shutting down` with the signal, runs `app.close()` first (drains HTTP and BullMQ workers, runs OnModuleDestroy such as `DrizzleService.onModuleDestroy()`), then flushes telemetry via the injected `flushTelemetry` callback (the OTel SDK shutdown), then calls `process.exit` (exit code 1 if `app.close()` failed) so a leftover socket cannot keep the pod alive until SIGKILL.
 
 *// in main.ts / worker.ts*\
-registerGracefulShutdown(app**,** logger**,** () **=>** otelSdk**.shutdown**())**;**
+registerGracefulShutdown(app**,** **await** app**.resolve**(PinoLogger)**,** () **=>** otelSdk**.shutdown**())**;**
 
 Set `terminationGracePeriodSeconds` to cover drain plus telemetry flush.
 

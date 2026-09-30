@@ -69,4 +69,16 @@ describe('registerGracefulShutdown', () => {
     expect(close).toHaveBeenCalledOnce();
     expect(exit).toHaveBeenCalledOnce();
   });
+
+  it('keeps handling a repeated SIGTERM so Node does not kill the process mid-drain', async () => {
+    const { exit, close } = setup();
+
+    process.emit('SIGTERM');
+    expect(process.listenerCount('SIGTERM')).toBe(1);
+    process.emit('SIGTERM');
+    await vi.waitFor(() => expect(exit).toHaveBeenCalled());
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(exit).toHaveBeenCalledOnce();
+  });
 });
